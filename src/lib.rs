@@ -49,12 +49,13 @@ impl Column {
     //     Rc::downgrade(&self.node)
     // }
 
-    pub fn append(&mut self) {
+    pub fn append_new(&mut self) -> Rc<RefCell<NodeContents>> {
         let mut n = NodeContents::new();
-        self.append_node( &mut n );
+        self.append( &mut n );
+        n
     }
 
-    pub fn append_node(&mut self, node: &mut Rc<RefCell<NodeContents>> ) {
+    pub fn append(&mut self, node: &mut Rc<RefCell<NodeContents>> ) {
         {
             let mut n = (*node).borrow_mut();
             n.down = Rc::downgrade(&self.head);
