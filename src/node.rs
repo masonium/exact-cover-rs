@@ -35,6 +35,7 @@ impl NodeContents {
 	rc
     }
 
+    /// Remove a node from its column
     pub fn remove_from_column(&mut self) {
 	let l = self.up.clone();
 	let r = self.down.clone();
@@ -42,6 +43,16 @@ impl NodeContents {
 	(*lrc).borrow_mut().down = r;
 	let rrc = self.up.upgrade().unwrap();
 	(*rrc).borrow_mut().up = l;
+    }
+
+    /// Remove a node from its row
+    pub fn remove_from_row(&mut self) {
+	let l = self.left.clone();
+	let r = self.right.clone();
+	let lrc = self.left.upgrade().unwrap();
+	(*lrc).borrow_mut().right = r;
+	let rrc = self.left.upgrade().unwrap();
+	(*rrc).borrow_mut().left = l;
     }
 }
 
@@ -127,5 +138,10 @@ impl Row {
         let mut v = NodeContents::new();
         self.append(&mut v);
         v
+    }
+
+    /// Remove 
+    pub fn cover(&mut self) {
+
     }
 }
