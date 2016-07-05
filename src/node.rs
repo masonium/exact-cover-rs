@@ -1,19 +1,24 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::{Rc, Weak};
+use std::fmt;
 
-type ColumnIndex = usize;
-type RowIndex = usize;
+pub type ColumnIndex = usize;
+pub type RowIndex = usize;
 
 #[derive(Debug)]
 pub struct NodeContents {
     up: Weak<RefCell<NodeContents>>,
     down: Weak<RefCell<NodeContents>>,
     left: Weak<RefCell<NodeContents>>,
-    right: Weak<RefCell<NodeContents>>,
+    pub right: Weak<RefCell<NodeContents>>,
 
-    column: Option<ColumnIndex>,
-    row: Option<RowIndex>
+    pub column: Option<ColumnIndex>,
+    pub row: Option<RowIndex>
 }
+
+
+pub type OwnedNode = Rc<RefCell<NodeContents>>;
+pub type WeakNode = Weak<RefCell<NodeContents>>;
 
 impl NodeContents {
     /// Create new node that circularly points to itself. 
@@ -56,6 +61,63 @@ impl NodeContents {
     }
 }
 
+impl fmt::Display for NodeContents {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({:?}, {:?})", self.row, self.column)
+    }
+}
+
+/// Prepend `node` to the left of `root.
+pub fn prepend_left(root: &mut OwnedNode, node: &WeakNode) {
+    let l = (*node).upgrade().unwrap();
+
+    {
+	let mut n = l.borrow_mut();
+	n.right = Rc::downgrade(&root);
+	n.left = root.borrow_mut().left.clone();
+    }
+    {
+	let mut head = root.borrow_mut();
+	head.left = (*node).clone();
+    }
+    {
+	let pleft = l.borrow_mut();
+	let prev_left  = pleft.left.upgrade().unwrap();
+	prev_left.borrow_mut().right = (*node).clone();
+    }
+
+}
+
+#[derive(Debug)]
+pub struct ColumnIterator {
+    head: WeakNode,
+    count: usize,
+    curr: usize
+}
+
+impl ColumnIterator {
+    pub fn new(c: &Column) -> ColumnIterator {
+        ColumnIterator { head: Rc::downgrade(&c.head), count: c.count, curr: 0 }
+    }
+}
+
+impl Iterator for ColumnIterator {
+    type Item = WeakNode;
+
+    fn next(&mut self) -> Option<WeakNode> {
+        if self.count > self.curr {
+            None
+        } else {
+            self.curr += 1;
+            let o = self.head.upgrade().unwrap();
+            let ref next = o.borrow().down;
+            self.head = next.clone();
+            Some(self.head.clone())
+        }
+       
+    }
+}
+
 #[derive(Debug)]
 pub struct Column {
     head: Rc<RefCell<NodeContents>>,
@@ -65,7 +127,21 @@ pub struct Column {
 
 impl Column {
     pub fn new(index: usize) -> Self {
-	Column { head: NodeContents::new(), count: 0, id: index }
+        let nc = NodeContents::new();
+        {
+            let mut c = nc.borrow_mut();
+            c.column = Some(index);
+        }
+	Column { head: nc, count: 0, id: index }
+    }
+
+
+    pub fn root(&self) -> WeakNode {
+        Rc::downgrade(&self.head)
+    }
+
+    pub fn from_node(node: OwnedNode, index: usize) -> Self {
+        Column { head: node, count: 0, id: index }
     }
 
     pub fn append_new(&mut self) -> Rc<RefCell<NodeContents>> {
@@ -74,8 +150,9 @@ impl Column {
 	n
     }
 
-    pub fn append(&mut self, node: &mut Weak<RefCell<NodeContents>> ) {
+    pub fn append(&mut self, node: &Weak<RefCell<NodeContents>> ) {
         let r = (*node).upgrade().unwrap();
+        r.borrow_mut().column = Some(self.id);
 
 	{
             let mut n = r.borrow_mut();
@@ -91,7 +168,17 @@ impl Column {
 	    let prev_up  = n.up.upgrade().unwrap();
 	    prev_up.borrow_mut().down = node.clone();
 	}
+
 	self.count += 1
+    }
+
+    /// cover the header node of the column
+    pub fn cover_header(&self) {
+        self.head.borrow_mut().remove_from_row();
+    }
+
+    pub fn iter(&self) -> ColumnIterator {
+        ColumnIterator::new(&self)
     }
 
     pub fn get_count(&self) -> usize {
@@ -140,8 +227,40 @@ impl Row {
         v
     }
 
-    /// Remove 
-    pub fn cover(&mut self) {
+    pub fn iter(&self) -> RowIterator {
+        RowIterator::new(&Rc::downgrade(&self.head))
+    }
+}
 
+
+#[derive(Debug)]
+pub struct RowIterator {
+    head: OwnedNode,
+    curr: WeakNode
+}
+
+/// Starting with the current node, iterate through them to the right
+/// until hitting the same node.
+impl RowIterator {
+    pub fn new(node: &WeakNode) -> RowIterator {
+        RowIterator { head: node.upgrade().unwrap(), curr: node.clone() }
+    }
+        
+}
+
+impl Iterator for RowIterator {
+    type Item = WeakNode;
+
+    fn next(&mut self) -> Option<WeakNode> {
+    //     let ref weak_next = self.curr.upgrade().unwrap().borrow().right;
+    //     let next = weak_next.upgrade().unwrap();
+    //     if next.borrow().column != self.head.borrow().column {
+    //         self.curr = weak_next.clone();
+    //         Some(*weak_next)
+    //     }
+    //     else {
+    //         None
+    //     }
+        None
     }
 }
