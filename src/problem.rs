@@ -1,6 +1,5 @@
-use node::{Column, Row, OwnedNode, NodeContents};
+use node::{Column, Row, OwnedNode, NodeContents, iter_row};
 use node::{prepend_left};
-use std::rc::Rc;
 use std::slice;
 
 pub struct Problem {
@@ -23,24 +22,22 @@ impl Problem {
 
         let max_constraint = *c.iter().max().unwrap() as usize;
 
-        // extend the constraint list to accomodate all constraints
+        // extend the constraint list to accomodate all constraints, if necessary
         if self.constraints.len() < max_constraint + 1 {
             self.constraints.reserve(max_constraint + 1);
             for i in self.constraints.len() .. max_constraint + 1 {
                 let c = Column::new(i);
                 prepend_left(&mut self.root, &c.root());
-                self.constraints.push( c );
+                self.constraints.push(c);
             }
         }
-        let mut row = Row::new(self.actions.len());
 
-        for col in c {
-            // Add a new node for each constraint, and attach it to the corresponding column
-            let n = row.append_new();
-            self.constraints[*col].append(&mut Rc::downgrade(&n));
-        }
+        // Create and collect new nodes for each constraint.
+        let nodes = c.iter().map(|x| self.constraints[*x].append_new()).collect();
 
-        self.actions.push(row);
+        // create a row from those nodes
+        let new_id  = self.actions.len();
+        self.actions.push(Row::new(nodes, new_id));
     }
 
     // Count the number of inner cells in the entire matrix
@@ -56,33 +53,42 @@ impl Problem {
         rc
     }
 
-    // Choose a row by removing all other actions that match at least one constraint.
-    // pub fn choose_row(&self, row_index: usize) -> bool {
-    //     let constraints = self.actions[row_index].iter();
-
-    //     for c in constraints {
-    //         // get the actual column
-    //         let col = &self.constraints[c.upgrade().unwrap().borrow().column.unwrap()];
-
-    //         // cover the column
-    //         self.cover_column(col);
-    //     }
-    // }
-
-    fn cover_row(&self, row_index: usize) {
-    }
-
     /// Cover a column by remove each action that could remove that
     /// column, and remove the column from the header list.
-    pub fn cover_column(&self, column_index: usize)  {
-        let col = &self.constraints[column_index];
+    pub fn cover_column(&mut self, column_index: usize) {
+        let mut col = &mut self.constraints[column_index];
 
         col.cover_header();
-        for n in col.iter() {
-            ///
+
+        for r in col.iter() {
+            // For every node in the row (except the one from this
+            // constraing), remove the node from its column and
+            // decrement the corresponding count
+            for n in iter_row(&r, false).skip(1) {
+                let sn = n.upgrade().unwrap();
+                sn.borrow_mut().remove_from_column();
+                col.dec_count();
+            }
         }
     }
 
+    /// Uncover a column, repairing all links in reverse order.
+    pub fn uncover_column(&mut self, column_index: usize) {
+        let mut col = &mut self.constraints[column_index];
+
+        // for r in col.iter() {
+        //     // For every node in the row (except the one from this
+        //     // constraing), remove the node from its column and
+        //     // decrement the corresponding count
+        //     for n in iter_row(&r, false).skip(1) {
+        //         let sn = n.upgrade().unwrap();
+        //         sn.borrow_mut().remove_from_column();
+        //         col.dec_count();
+        //     }
+        // }
+
+        col.uncover_header();
+    }
 
     pub fn all_constraints(&self) -> slice::Iter<Column> {
         self.constraints.iter()
