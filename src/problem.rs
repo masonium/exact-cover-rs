@@ -6,9 +6,10 @@ use std::hash::Hash;
 use std::collections::{HashMap};
 use std::slice;
 use std::rc::{Rc};
+use std::fmt::Debug;
 
 
-pub struct Problem<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> {
+pub struct Problem<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> {
     root: OwnedNode,
     pub constraints: Vec<Column<Constraint>>,
     pub actions: Vec<Row<Action>>,
@@ -17,7 +18,7 @@ pub struct Problem<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> {
 }
 
 
-impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Constraint> {
+impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Problem<Action, Constraint> {
     pub fn new() -> Problem<Action, Constraint> {
         Problem { constraints: Vec::new(), actions: Vec::new(),
                   root: NodeContents::new(),
@@ -61,11 +62,10 @@ impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Co
     }
 
     /// Choose the column with the smallest count
-    pub fn choose_column(&self) -> Option<usize> {
+    pub fn choose_column(&self) -> Option<&Column<Constraint>> {
         iter_row(&Rc::downgrade(&self.root))
-            .map( |node| self.get_column(&node) )
+            .map( |ref node| self.get_column(&node) )
             .min_by_key( |ref c| c.count() )
-            .map( |ref c| c.id())
     }
 
     /// Return the column associated with a node.
@@ -73,6 +73,12 @@ impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Co
         let s = row_node.upgrade().unwrap();
         let ci = s.borrow().column.unwrap();
         &self.constraints[ci]
+    }
+
+    fn get_column_mut(&mut self, row_node: &WeakNode) -> &mut Column<Constraint> {
+        let s = row_node.upgrade().unwrap();
+        let ci = s.borrow().column.unwrap();
+        &mut self.constraints[ci]
     }
 
 
@@ -123,12 +129,15 @@ impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Co
         };
 
         for r in iter {
+            println!("Looking at action {:?}", self.get_action(&r));
             // For every node in the row (except the one from this
-            // constraing), remove the node from its column and
+            // constraint), remove the node from its column and
             // decrement the corresponding count
             for n in iter_row(&r) {
                 let sn = n.upgrade().unwrap();
                 let ci = sn.borrow().column.unwrap();
+                //println!("Decrementing {:?}", self.get_column(&n).constraint());
+
                 sn.borrow_mut().remove_from_column();
                 self.constraints[ci].dec_count();
             }
@@ -137,20 +146,21 @@ impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Co
 
     /// Uncover a column, repairing all links in reverse order.
     pub fn uncover_column(&mut self, column_index: usize) {
-        let mut col = &mut self.constraints[column_index];
+        let iter = self.constraints[column_index].iter();
 
-        for r in col.iter().rev() {
+        for r in iter.rev() {
             // For every node in the row (except the one from this
             // constraing), remove the node from its column and
             // decrement the corresponding count
             for n in iter_row(&r).rev() {
                 let sn = n.upgrade().unwrap();
+
                 sn.borrow_mut().reinsert_into_column();
-                col.inc_count();
+                self.get_column_mut(&n).inc_count();
             }
         }
 
-        col.uncover_header();
+        self.constraints[column_index].uncover_header();
     }
 
     pub fn all_constraints(&self) -> slice::Iter<Column<Constraint>> {
@@ -162,5 +172,13 @@ impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Co
     pub fn assert_header_counts(&self) {
         assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).count());
         assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).rev().count());
+    }
+
+    pub fn remaining_header_counts(&self) {
+        for x in iter_row(&Rc::downgrade(&self.root)) {
+            let c = self.get_column(&x);
+            print!("({:?}, {}); ", c.constraint(), c.count());
+        }
+        println!("");
     }
 }
