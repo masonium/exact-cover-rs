@@ -3,65 +3,21 @@ use node::{prepend_up};
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct ColumnIterator {
-    curr_up: OwnedNode,
-    curr_down: OwnedNode
-}
-
-/// Iterate through the ndoes in a column, skipping the initial
-/// (header) node.
-impl ColumnIterator {
-    pub fn new(c: &Column) -> ColumnIterator {
-        ColumnIterator { curr_up: c.head.clone(),
-                         curr_down: c.head.clone() }
-    }
-}
-
-impl Iterator for ColumnIterator {
-    type Item = WeakNode;
-
-    fn next(&mut self) -> Option<WeakNode> {
-        let ref weak_next = self.curr_down.borrow().down();
-        self.curr_down = weak_next.upgrade().unwrap();
-
-        if self.curr_down.borrow().row != self.curr_up.borrow().row {
-            Some(weak_next.clone())
-        }
-        else {
-            None
-        }
-    }
-}
-
-impl DoubleEndedIterator for ColumnIterator {
-    fn next_back(&mut self) -> Option<WeakNode> {
-        let ref weak_next = self.curr_up.borrow().up();
-        self.curr_up = weak_next.upgrade().unwrap();
-
-        if self.curr_down.borrow().row != self.curr_up.borrow().row {
-            Some(weak_next.clone())
-        }
-        else {
-            None
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Column {
+pub struct Column<C> {
     head: OwnedNode,
     count: usize,
     id: usize,
+    constraint: C
 }
 
-impl Column {
-    pub fn new(index: usize) -> Self {
+impl<C> Column<C> {
+    pub fn new(constraint: C, index: usize) -> Self {
         let nc = NodeContents::new();
         {
             let mut c = nc.borrow_mut();
             c.column = Some(index);
         }
-        Column { head: nc, count: 0, id: index }
+        Column { head: nc, count: 0, id: index, constraint: constraint }
     }
 
     pub fn id(&self) -> usize {
@@ -74,6 +30,10 @@ impl Column {
 
     pub fn count(&self) -> usize {
         self.count
+    }
+
+    pub fn constraint(&self) -> &C {
+        &self.constraint
     }
 
     /// Create a new node append to the end of the column, and return.
@@ -136,8 +96,48 @@ impl Column {
 }
 
 
-#[test]
-fn create_column() {
-    let mut h = Column::new(0);
-    h.append_new();
+
+#[derive(Debug)]
+pub struct ColumnIterator {
+    curr_up: OwnedNode,
+    curr_down: OwnedNode
+}
+
+/// Iterate through the ndoes in a column, skipping the initial
+/// (header) node.
+impl ColumnIterator {
+    pub fn new<C>(c: &Column<C>) -> ColumnIterator {
+        ColumnIterator { curr_up: c.head.clone(),
+                         curr_down: c.head.clone() }
+    }
+}
+
+impl Iterator for ColumnIterator {
+    type Item = WeakNode;
+
+    fn next(&mut self) -> Option<WeakNode> {
+        let ref weak_next = self.curr_down.borrow().down();
+        self.curr_down = weak_next.upgrade().unwrap();
+
+        if self.curr_down.borrow().row != self.curr_up.borrow().row {
+            Some(weak_next.clone())
+        }
+        else {
+            None
+        }
+    }
+}
+
+impl DoubleEndedIterator for ColumnIterator {
+    fn next_back(&mut self) -> Option<WeakNode> {
+        let ref weak_next = self.curr_up.borrow().up();
+        self.curr_up = weak_next.upgrade().unwrap();
+
+        if self.curr_down.borrow().row != self.curr_up.borrow().row {
+            Some(weak_next.clone())
+        }
+        else {
+            None
+        }
+    }
 }

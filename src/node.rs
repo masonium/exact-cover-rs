@@ -162,13 +162,14 @@ pub fn prepend_up(root: &mut OwnedNode, node: &WeakNode) {
 }
 
 #[derive(Debug)]
-pub struct Row {
+pub struct Row<Action: Copy> {
     nodes: Vec<Rc<RefCell<NodeContents>>>,
-    id: usize
+    id: usize,
+    action: Action
 }
 
-impl Row {
-    pub fn new(nodes: Vec<OwnedNode>, index: usize) -> Self {
+impl<Action: Copy> Row<Action> {
+    pub fn new(nodes: Vec<OwnedNode>, action: Action, index: usize) -> Self {
         let l = nodes.len();
         for i in l..(2*l) {
             let mut n = nodes[i % l].borrow_mut();
@@ -176,7 +177,7 @@ impl Row {
             n.right = Rc::downgrade(&nodes[(i+1) % l]);
             n.row = Some(index);
         }
-        Row {nodes: nodes, id: index }
+        Row {nodes: nodes, id: index, action: action }
     }
 
     pub fn first_node(&self) -> WeakNode {
@@ -185,6 +186,9 @@ impl Row {
 
     pub fn iter(&self) -> FullRowIterator {
         FullRowIterator::new(&self)
+    }
+    pub fn action(&self) -> Action {
+        self.action
     }
 }
 
@@ -242,7 +246,7 @@ pub struct FullRowIterator {
 }
 
 impl FullRowIterator {
-    pub fn new(row: &Row) -> FullRowIterator {
+    pub fn new<A: Copy>(row: &Row<A>) -> FullRowIterator {
         FullRowIterator{ head_column: row.nodes[0].borrow().column.unwrap(), curr: row.nodes[0].clone(),
                          started: false }
     }
@@ -272,11 +276,5 @@ pub fn column_index(node: &WeakNode) -> Option<ColumnIndex> {
     let s = node.upgrade().unwrap();
     let c = s.borrow().column;
     c
-}
-
-pub fn row_index(node: &WeakNode) -> Option<RowIndex> {
-    let s = node.upgrade().unwrap();
-    let r = s.borrow().row;
-    r
 }
 

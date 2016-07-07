@@ -2,51 +2,57 @@ pub use column::{Column};
 
 use node::{Row, WeakNode, OwnedNode, NodeContents, iter_row, column_index};
 use node::{prepend_left};
+use std::hash::Hash;
+use std::collections::{HashMap};
 use std::slice;
 use std::rc::{Rc};
 
 
-pub struct Problem {
+pub struct Problem<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> {
     root: OwnedNode,
-    pub constraints: Vec<Column>,
-    pub actions: Vec<Row>
+    pub constraints: Vec<Column<Constraint>>,
+    pub actions: Vec<Row<Action>>,
+    constraint_map: HashMap<Constraint, usize>,
+    action_map: HashMap<Action, usize>,
 }
 
 
-impl Problem {
-    pub fn new() -> Problem {
-        Problem { constraints: Vec::new(), actions: Vec::new(), root: NodeContents::new() }
+impl<Action: Copy + Eq + Hash, Constraint: Clone + Hash + Eq> Problem<Action, Constraint> {
+    pub fn new() -> Problem<Action, Constraint> {
+        Problem { constraints: Vec::new(), actions: Vec::new(),
+                  root: NodeContents::new(),
+                  constraint_map: HashMap::new(),
+                  action_map: HashMap::new()
+        }
     }
 
     /// Add a new action, creating additional constraints on demand
-    pub fn add_action(&mut self, c: &[usize]) {
+    pub fn add_action(&mut self, a: Action, clist: &[Constraint]) {
         // Ignore actions that don't satisfy constraints
-        if c.is_empty() {
+        if clist.is_empty() {
             return
         }
 
-        let max_constraint = *c.iter().max().unwrap() as usize;
-
         // extend the constraint list to accomodate all constraints, if necessary
-        {
-            if self.constraints.len() < max_constraint + 1 {
-                self.constraints.reserve(max_constraint + 1);
-                for i in self.constraints.len() .. max_constraint + 1 {
-                    let c = Column::new(i);
-                    prepend_left(&mut self.root, &c.root());
-                    self.constraints.push(c);
-                }
+        for x in clist {
+            let curr_size = self.constraint_map.len();
+            if !self.constraint_map.contains_key(x) {
+                let c = Column::new(x.clone(), curr_size);
+                prepend_left(&mut self.root, &c.root());
+                self.constraints.push(c);
+                self.constraint_map.insert(x.clone(), curr_size);
             }
         }
 
         // Create and collect new nodes for each constraint.
-        let nodes = c.iter().map(|x| {
-            self.constraints[*x].append_new()
+        let nodes = clist.iter().map(|x| {
+            self.constraints[*self.constraint_map.get(x).unwrap()].append_new()
         }).collect();
 
         // create a row from those nodes
         let new_id  = self.actions.len();
-        self.actions.push(Row::new(nodes, new_id));
+        self.actions.push(Row::new(nodes, a, new_id));
+        self.action_map.insert(a, new_id);
     }
 
     // Count the number of inner cells in the entire matrix
@@ -62,16 +68,31 @@ impl Problem {
             .map( |ref c| c.id())
     }
 
-    fn get_column(&self, row_node: &WeakNode) -> &Column {
+    /// Return the column associated with a node.
+    fn get_column(&self, row_node: &WeakNode) -> &Column<Constraint> {
         let s = row_node.upgrade().unwrap();
         let ci = s.borrow().column.unwrap();
         &self.constraints[ci]
     }
 
+
+    /// Return the row associated with a node.
+    fn get_row(&self, row_node: &WeakNode) -> &Row<Action> {
+        let s = row_node.upgrade().unwrap();
+        let ri = s.borrow().row.unwrap();
+        &self.actions[ri]
+    }
+
+    /// Return the action associated with a node.
+    pub fn get_action(&self, row_node: &WeakNode) -> Action {
+        self.get_row(row_node).action()
+    }
+
+
     /// Require that a given action be part of the solution
-    pub fn require_row(&mut self, action: usize) -> Result<(), String> {
+    pub fn require_row(&mut self, action: Action) -> Result<(), String> {
         let iter = {
-            let act: &Row = &(self.actions[action]);
+            let act = &(self.actions.get(*self.action_map.get(&action).unwrap()).unwrap());
 
             if let Some(c) = act.iter().map(|node| { self.get_column(&node) }).find(|c| { c.is_already_chosen() })
             {
@@ -108,7 +129,6 @@ impl Problem {
             for n in iter_row(&r) {
                 let sn = n.upgrade().unwrap();
                 let ci = sn.borrow().column.unwrap();
-                println!("looking at other column: {}", ci);
                 sn.borrow_mut().remove_from_column();
                 self.constraints[ci].dec_count();
             }
@@ -133,7 +153,7 @@ impl Problem {
         col.uncover_header();
     }
 
-    pub fn all_constraints(&self) -> slice::Iter<Column> {
+    pub fn all_constraints(&self) -> slice::Iter<Column<Constraint>> {
         self.constraints.iter()
     }
 
@@ -142,13 +162,5 @@ impl Problem {
     pub fn assert_header_counts(&self) {
         assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).count());
         assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).rev().count());
-    }
-
-    pub fn print_remaining_constraint_counts(&self) {
-        for c in iter_row(&Rc::downgrade(&self.root)) {
-            let n = c.upgrade().unwrap();
-            let col = &self.constraints[n.borrow().column.unwrap()];
-            println!("column {}: {}", col.id(), col.count());
-        }
     }
 }

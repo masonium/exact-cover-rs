@@ -1,17 +1,18 @@
 use problem::Problem;
-use node::{iter_row, column_index, row_index};
+use node::{iter_row, column_index};
+use std::hash::Hash;
 
-pub struct Solver {
-    problem: Problem,
-    partial_solution: Vec<usize>
+pub struct Solver<A: Copy + Eq + Hash, C: Clone + Hash + Eq> {
+    problem: Problem<A, C>,
+    partial_solution: Vec<A>
 }
 
-impl Solver {
-    pub fn new(problem: Problem) -> Solver {
+impl<A: Copy + Eq + Hash, C: Clone + Hash + Eq> Solver<A, C> {
+    pub fn new(problem: Problem<A, C>) -> Solver<A, C> {
         Solver { problem: problem, partial_solution: Vec::new() }
     }
 
-    pub fn require_action(&mut self, action: usize) -> Result<(), String> {
+    pub fn require_action(&mut self, action: A) -> Result<(), String> {
         match self.problem.require_row(action) {
             Ok(r) => {
                 self.partial_solution.push(action);
@@ -23,12 +24,12 @@ impl Solver {
         }
     }
 
-    pub fn first_solution(&mut self) -> Option<Vec<usize>> {
+    /// Return the first solution. .
+    pub fn first_solution(&mut self) -> Option<Vec<A>> {
         self.first_solution_aux()
     }
 
-    /// Choose a column to cover from among those available.
-    fn first_solution_aux(&mut self) -> Option<Vec<usize>> {
+    fn first_solution_aux(&mut self) -> Option<Vec<A>> {
         let constraint = self.problem.choose_column();
         if let None = constraint {
             return Some(self.partial_solution.clone());
@@ -48,8 +49,7 @@ impl Solver {
         // Try that action, and return the solution to partial
         // problem, if possible.
         for action in action_nodes {
-            let ri = row_index(&action).unwrap();
-            self.partial_solution.push(ri);
+            self.partial_solution.push(self.problem.get_action(&action));
 
             for c in iter_row(&action) {
                 self.problem.cover_column(column_index(&c).unwrap())
