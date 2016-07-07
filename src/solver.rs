@@ -49,8 +49,6 @@ impl<A: Debug + Copy + Eq + Hash, C: Debug + Clone + Hash + Eq> Solver<A, C> {
         }
 
         self.problem.cover_column(cindex);
-        println!("Covering {:?}", self.problem.constraints[cindex].constraint());
-        self.problem.remaining_header_counts();
 
         // pick an action for the constraint to satisfy
         let action_nodes = self.problem.constraints[cindex].iter();
@@ -59,23 +57,21 @@ impl<A: Debug + Copy + Eq + Hash, C: Debug + Clone + Hash + Eq> Solver<A, C> {
         // problem, if possible.
         for action in action_nodes {
             let a = self.problem.get_action(&action);
-            println!("Trying {:?}", a);
 
             self.partial_solution.push(a);
 
             for c in iter_row(&action) {
                 self.problem.cover_column(column_index(&c).unwrap())
             }
-            self.problem.remaining_header_counts();
 
             let sol = self.first_solution_aux();
 
-            for c in iter_row(&action).rev() {
-                self.problem.uncover_column(column_index(&c).unwrap())
-            }
-            self.problem.remaining_header_counts();
             if let Some(x) = sol {
                 return Some(x);
+            }
+
+            for c in iter_row(&action).rev() {
+                self.problem.uncover_column(column_index(&c).unwrap())
             }
 
             self.partial_solution.pop();

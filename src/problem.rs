@@ -8,7 +8,6 @@ use std::slice;
 use std::rc::{Rc};
 use std::fmt::Debug;
 
-
 pub struct Problem<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> {
     root: OwnedNode,
     pub constraints: Vec<Column<Constraint>>,
@@ -129,19 +128,19 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
         };
 
         for r in iter {
-            println!("Looking at action {:?}", self.get_action(&r));
             // For every node in the row (except the one from this
             // constraint), remove the node from its column and
             // decrement the corresponding count
             for n in iter_row(&r) {
                 let sn = n.upgrade().unwrap();
                 let ci = sn.borrow().column.unwrap();
-                //println!("Decrementing {:?}", self.get_column(&n).constraint());
 
                 sn.borrow_mut().remove_from_column();
                 self.constraints[ci].dec_count();
             }
         }
+
+        self.assert_header_counts();
     }
 
     /// Uncover a column, repairing all links in reverse order.
@@ -157,10 +156,13 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
 
                 sn.borrow_mut().reinsert_into_column();
                 self.get_column_mut(&n).inc_count();
+
             }
         }
 
         self.constraints[column_index].uncover_header();
+
+        self.assert_header_counts();
     }
 
     pub fn all_constraints(&self) -> slice::Iter<Column<Constraint>> {
@@ -170,15 +172,71 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
 
     /// Testing function: assert the number of headers in the linked list is equal to the number of constraints.
     pub fn assert_header_counts(&self) {
-        assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).count());
-        assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).rev().count());
+        for x in iter_row(&Rc::downgrade(&self.root)) {
+            let c = self.get_column(&x);
+            assert_eq!(c.iter().count(), c.count());
+        }
     }
 
     pub fn remaining_header_counts(&self) {
+        print!("Headers: ");
         for x in iter_row(&Rc::downgrade(&self.root)) {
             let c = self.get_column(&x);
             print!("({:?}, {}); ", c.constraint(), c.count());
         }
         println!("");
     }
+}
+
+
+#[test]
+fn row_rev_iterator() {
+    let mut p = Problem::new();
+    p.add_action(0, &[0, 1, 2, 3]);
+    let r = &p.actions[0];
+    let mut iter = iter_row(&r.first_node()).rev();
+
+    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 3);
+    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 2);
+    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 1);
+}
+
+#[test]
+fn row_normal_iterator() {
+    let mut p = Problem::new();
+    p.add_action(0, &[0, 1, 2, 3]);
+    let r = &p.actions[0];
+    let mut iter = iter_row(&r.first_node());
+
+    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 1);
+    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 2);
+    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 3);
+}
+
+#[test]
+fn column_normal_iterator() {
+    let mut p = Problem::new();
+    p.add_action(0, &[0]);
+    p.add_action(1, &[0]);
+    p.add_action(2, &[0]);
+    let c = &p.constraints[0];
+    let mut iter = c.iter();
+
+    assert_eq!(p.get_action(&iter.next().unwrap()), 0);
+    assert_eq!(p.get_action(&iter.next().unwrap()), 1);
+    assert_eq!(p.get_action(&iter.next().unwrap()), 2);
+}
+
+#[test]
+fn column_rev_iterator() {
+    let mut p = Problem::new();
+    p.add_action(0, &[0]);
+    p.add_action(1, &[0]);
+    p.add_action(2, &[0]);
+    let c = &p.constraints[0];
+    let mut iter = c.iter().rev();
+
+    assert_eq!(p.get_action(&iter.next().unwrap()), 2);
+    assert_eq!(p.get_action(&iter.next().unwrap()), 1);
+    assert_eq!(p.get_action(&iter.next().unwrap()), 0);
 }
