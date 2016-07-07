@@ -25,11 +25,11 @@ impl<A: Action, C: Constraint> Solver<A, C> {
 
     /// Return the first solution. .
     pub fn first_solution(&mut self) -> Option<Vec<A>> {
-        self.problem.remaining_header_counts();
         self.first_solution_aux()
     }
 
     fn first_solution_aux(&mut self) -> Option<Vec<A>> {
+        println!("recurse.");
         let cindex = {
             let constraint = self.problem.choose_column();
             if let None = constraint {
@@ -55,26 +55,38 @@ impl<A: Action, C: Constraint> Solver<A, C> {
         // problem, if possible.
         for action in action_nodes {
             let a = self.problem.get_action(&action);
+            println!("Trying {:?}", a);
 
             self.partial_solution.push(a);
 
+            let other_column_count = iter_row(&action).count();
             for c in iter_row(&action) {
-                self.problem.cover_column(column_index(&c).unwrap())
+                let ci = column_index(&c).unwrap();
+                println!("c{}", ci);
+                self.problem.cover_column(ci)
             }
+            assert_eq!(other_column_count, iter_row(&action).count());
 
             let sol = self.first_solution_aux();
+            println!("Returning from {:?}", a);
 
-            if let Some(x) = sol {
-                return Some(x);
-            }
+            assert_eq!(other_column_count, iter_row(&action).count());
 
             for c in iter_row(&action).rev() {
+                let ci = column_index(&c).unwrap();
+                println!("c{}", ci);
                 self.problem.uncover_column(column_index(&c).unwrap())
+            }
+
+            if let Some(x) = sol {
+                 return Some(x);
             }
 
             self.partial_solution.pop();
         }
 
+        self.problem.uncover_column(cindex);
+        println!("return");
         None
     }
 }
