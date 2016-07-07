@@ -8,17 +8,23 @@ use std::slice;
 use std::rc::{Rc};
 use std::fmt::Debug;
 
-pub struct Problem<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> {
+pub trait Constraint : Debug + Clone + Hash + Eq {}
+impl<T: Debug + Clone + Hash + Eq> Constraint for T {}
+
+pub trait Action : Debug + Copy + Hash + Eq {}
+impl<T: Debug + Copy + Hash + Eq> Action for T {}
+
+pub struct Problem<A: Action, C: Constraint> {
     root: OwnedNode,
-    pub constraints: Vec<Column<Constraint>>,
-    pub actions: Vec<Row<Action>>,
-    constraint_map: HashMap<Constraint, usize>,
-    action_map: HashMap<Action, usize>,
+    pub constraints: Vec<Column<C>>,
+    pub actions: Vec<Row<A>>,
+    constraint_map: HashMap<C, usize>,
+    action_map: HashMap<A, usize>,
 }
 
 
-impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Problem<Action, Constraint> {
-    pub fn new() -> Problem<Action, Constraint> {
+impl<A: Action, C: Constraint> Problem<A, C> {
+    pub fn new() -> Problem<A, C> {
         Problem { constraints: Vec::new(), actions: Vec::new(),
                   root: NodeContents::new(),
                   constraint_map: HashMap::new(),
@@ -27,7 +33,7 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
     }
 
     /// Add a new action, creating additional constraints on demand
-    pub fn add_action(&mut self, a: Action, clist: &[Constraint]) {
+    pub fn add_action(&mut self, a: A, clist: &[C]) {
         // Ignore actions that don't satisfy constraints
         if clist.is_empty() {
             return
@@ -61,20 +67,20 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
     }
 
     /// Choose the column with the smallest count
-    pub fn choose_column(&self) -> Option<&Column<Constraint>> {
+    pub fn choose_column(&self) -> Option<&Column<C>> {
         iter_row(&Rc::downgrade(&self.root))
             .map( |ref node| self.get_column(&node) )
             .min_by_key( |ref c| c.count() )
     }
 
     /// Return the column associated with a node.
-    fn get_column(&self, row_node: &WeakNode) -> &Column<Constraint> {
+    fn get_column(&self, row_node: &WeakNode) -> &Column<C> {
         let s = row_node.upgrade().unwrap();
         let ci = s.borrow().column.unwrap();
         &self.constraints[ci]
     }
 
-    fn get_column_mut(&mut self, row_node: &WeakNode) -> &mut Column<Constraint> {
+    fn get_column_mut(&mut self, row_node: &WeakNode) -> &mut Column<C> {
         let s = row_node.upgrade().unwrap();
         let ci = s.borrow().column.unwrap();
         &mut self.constraints[ci]
@@ -82,26 +88,26 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
 
 
     /// Return the row associated with a node.
-    fn get_row(&self, row_node: &WeakNode) -> &Row<Action> {
+    fn get_row(&self, row_node: &WeakNode) -> &Row<A> {
         let s = row_node.upgrade().unwrap();
         let ri = s.borrow().row.unwrap();
         &self.actions[ri]
     }
 
     /// Return the action associated with a node.
-    pub fn get_action(&self, row_node: &WeakNode) -> Action {
+    pub fn get_action(&self, row_node: &WeakNode) -> A {
         self.get_row(row_node).action()
     }
 
 
     /// Require that a given action be part of the solution
-    pub fn require_row(&mut self, action: Action) -> Result<(), String> {
+    pub fn require_row(&mut self, action: A) -> Result<(), String> {
         let iter = {
             let act = &(self.actions.get(*self.action_map.get(&action).unwrap()).unwrap());
 
             if let Some(c) = act.iter().map(|node| { self.get_column(&node) }).find(|c| { c.is_already_chosen() })
             {
-                return Err(format!("Could not require row; Constraint {} already satisfied", c.id()));
+                return Err(format!("Could not require row; C {} already satisfied", c.id()));
             }
             act.iter()
         };
@@ -165,7 +171,7 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
         self.assert_header_counts();
     }
 
-    pub fn all_constraints(&self) -> slice::Iter<Column<Constraint>> {
+    pub fn all_constraints(&self) -> slice::Iter<Column<C>> {
         self.constraints.iter()
     }
 
@@ -191,7 +197,7 @@ impl<Action: Debug + Copy + Eq + Hash, Constraint: Debug + Clone + Hash + Eq> Pr
 
 #[test]
 fn row_rev_iterator() {
-    let mut p = Problem::new();
+    let mut p  = Problem::new();
     p.add_action(0, &[0, 1, 2, 3]);
     let r = &p.actions[0];
     let mut iter = iter_row(&r.first_node()).rev();

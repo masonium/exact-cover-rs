@@ -1,14 +1,12 @@
-use problem::Problem;
+use problem::{Problem, Constraint, Action};
 use node::{iter_row, column_index};
-use std::hash::Hash;
-use std::fmt::Debug;
 
-pub struct Solver<A: Debug + Copy + Eq + Hash, C: Debug + Clone + Hash + Eq> {
+pub struct Solver<A: Action, C: Constraint> {
     problem: Problem<A, C>,
     partial_solution: Vec<A>
 }
 
-impl<A: Debug + Copy + Eq + Hash, C: Debug + Clone + Hash + Eq> Solver<A, C> {
+impl<A: Action, C: Constraint> Solver<A, C> {
     pub fn new(problem: Problem<A, C>) -> Solver<A, C> {
         Solver { problem: problem, partial_solution: Vec::new() }
     }
