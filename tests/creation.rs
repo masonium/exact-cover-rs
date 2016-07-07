@@ -1,14 +1,7 @@
 extern crate dancing_links;
 
-use dancing_links::node::{Column};
 use dancing_links::problem::{Problem};
 use dancing_links::solver::{Solver};
-
-#[test]
-fn create_column() {
-    let mut h = Column::new(0);
-    let n = h.append_new();
-}
 
 #[test]
 fn create_problem() {
@@ -19,6 +12,7 @@ fn create_problem() {
     assert_eq!(p.count_cells(), 5);
     p.add_action(&[2, 4]);
     assert_eq!(p.count_cells(), 7);
+    p.assert_header_counts();
 }
 
 #[test]
@@ -29,6 +23,6 @@ fn solve_problem() {
     p.add_action(&[2, 4]);
     assert_eq!(p.count_cells(), 7);
 
-    let mut solver = Solver { problem : p };
+    let mut solver = Solver::new(p);
     solver.first_solution();
 }

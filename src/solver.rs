@@ -2,48 +2,71 @@ use problem::Problem;
 use node::{iter_row, column_index, row_index};
 
 pub struct Solver {
-    pub problem: Problem
+    problem: Problem,
+    partial_solution: Vec<usize>
 }
 
 impl Solver {
-    /// Choose a column to cover from among those available.
+    pub fn new(problem: Problem) -> Solver {
+        Solver { problem: problem, partial_solution: Vec::new() }
+    }
+
+    pub fn require_action(&mut self, action: usize) -> Result<(), String> {
+        match self.problem.require_row(action) {
+            Ok(r) => {
+                self.partial_solution.push(action);
+                Ok(r)
+            },
+            Err(s) => {
+                Err(s)
+            }
+        }
+    }
+
     pub fn first_solution(&mut self) -> Option<Vec<usize>> {
-        let mut solution: Vec<usize> = Vec::new();
+        self.first_solution_aux()
+    }
 
-        loop {
-            let constraint = self.problem.choose_column();
-            if let None = constraint {
-                println!("Found constraint with no actions.");
-                break
+    /// Choose a column to cover from among those available.
+    fn first_solution_aux(&mut self) -> Option<Vec<usize>> {
+        let constraint = self.problem.choose_column();
+        if let None = constraint {
+            return Some(self.partial_solution.clone());
+        }
+
+        let cindex = constraint.unwrap();
+        
+        if self.problem.constraints[cindex].count() == 0 {
+            return None;
+        }
+
+        self.problem.cover_column(cindex);
+
+        // pick an action for the constraint to satisfy
+        let action_nodes = self.problem.constraints[cindex].iter();
+
+        // Try that action, and return the solution to partial
+        // problem, if possible.
+        for action in action_nodes {
+            let ri = row_index(&action).unwrap();
+            self.partial_solution.push(ri);
+
+            for c in iter_row(&action) {
+                self.problem.cover_column(column_index(&c).unwrap())
             }
 
-            let cindex = constraint.unwrap();
-            println!("using constraint {}", cindex);
-            self.problem.cover_column(cindex);
+            let sol = self.first_solution_aux();
 
-            // pick an action for the constraint to satisfy
-            let action_nodes = self.problem.constraints[cindex].iter();
 
-            // Try that action, and return the solution to partial
-            // problem, if possible.
-            for action in action_nodes {
-                solution.push(row_index(&action).unwrap());
-
-                for c in iter_row(&action, false).skip(1) {
-                    self.problem.cover_column(column_index(&c).unwrap())
-                }
-
-                if let Some(x) = self.first_solution() {
-                    return Some(x);
-                }
-
-                for c in iter_row(&action, true).skip(1) {
-                    self.problem.uncover_column(column_index(&c).unwrap())
-                }
-
-                solution.pop();
+            for c in iter_row(&action).rev() {
+                self.problem.uncover_column(column_index(&c).unwrap())
             }
-            break;
+
+            if let Some(x) = sol {
+                return Some(x);
+            }
+
+            self.partial_solution.pop();
         }
 
         None

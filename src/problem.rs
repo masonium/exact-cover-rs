@@ -1,12 +1,17 @@
-use node::{Column, Row, OwnedNode, NodeContents, iter_row};
+pub use column::{Column};
+
+use node::{Row, WeakNode, OwnedNode, NodeContents, iter_row, column_index};
 use node::{prepend_left};
 use std::slice;
+use std::rc::{Rc};
+
 
 pub struct Problem {
     root: OwnedNode,
     pub constraints: Vec<Column>,
     pub actions: Vec<Row>
 }
+
 
 impl Problem {
     pub fn new() -> Problem {
@@ -23,17 +28,21 @@ impl Problem {
         let max_constraint = *c.iter().max().unwrap() as usize;
 
         // extend the constraint list to accomodate all constraints, if necessary
-        if self.constraints.len() < max_constraint + 1 {
-            self.constraints.reserve(max_constraint + 1);
-            for i in self.constraints.len() .. max_constraint + 1 {
-                let c = Column::new(i);
-                prepend_left(&mut self.root, &c.root());
-                self.constraints.push(c);
+        {
+            if self.constraints.len() < max_constraint + 1 {
+                self.constraints.reserve(max_constraint + 1);
+                for i in self.constraints.len() .. max_constraint + 1 {
+                    let c = Column::new(i);
+                    prepend_left(&mut self.root, &c.root());
+                    self.constraints.push(c);
+                }
             }
         }
 
         // Create and collect new nodes for each constraint.
-        let nodes = c.iter().map(|x| self.constraints[*x].append_new()).collect();
+        let nodes = c.iter().map(|x| {
+            self.constraints[*x].append_new()
+        }).collect();
 
         // create a row from those nodes
         let new_id  = self.actions.len();
@@ -45,29 +54,63 @@ impl Problem {
         return self.constraints.iter().map(|ref x| { x.get_count() }).fold(0, |x, y| { x + y })
     }
 
-    /// Choose a column to cover from among those available.
+    /// Choose the column with the smallest count
     pub fn choose_column(&self) -> Option<usize> {
-        let ref x =  self.root.borrow().right;
-        let r2 = x.upgrade().unwrap();
-        let rc = r2.borrow().column;
-        rc
+        iter_row(&Rc::downgrade(&self.root))
+            .map( |node| self.get_column(&node) )
+            .min_by_key( |ref c| c.count() )
+            .map( |ref c| c.id())
+    }
+
+    fn get_column(&self, row_node: &WeakNode) -> &Column {
+        let s = row_node.upgrade().unwrap();
+        let ci = s.borrow().column.unwrap();
+        &self.constraints[ci]
+    }
+
+    /// Require that a given action be part of the solution
+    pub fn require_row(&mut self, action: usize) -> Result<(), String> {
+        let iter = {
+            let act: &Row = &(self.actions[action]);
+
+            if let Some(c) = act.iter().map(|node| { self.get_column(&node) }).find(|c| { c.is_already_chosen() })
+            {
+                return Err(format!("Could not require row; Constraint {} already satisfied", c.id()));
+            }
+            act.iter()
+        };
+
+        for n in iter {
+            let ci = self.get_column(&n).id();
+            self.cover_column(ci);
+        }
+
+        Ok(())
     }
 
     /// Cover a column by remove each action that could remove that
     /// column, and remove the column from the header list.
     pub fn cover_column(&mut self, column_index: usize) {
-        let mut col = &mut self.constraints[column_index];
+        {
+            let col = &mut self.constraints[column_index];
+            col.cover_header();
+        }
 
-        col.cover_header();
+        let iter = {
+            let col = &self.constraints[column_index];
+            col.iter()
+        };
 
-        for r in col.iter() {
+        for r in iter {
             // For every node in the row (except the one from this
             // constraing), remove the node from its column and
             // decrement the corresponding count
-            for n in iter_row(&r, false).skip(1) {
+            for n in iter_row(&r) {
                 let sn = n.upgrade().unwrap();
+                let ci = sn.borrow().column.unwrap();
+                println!("looking at other column: {}", ci);
                 sn.borrow_mut().remove_from_column();
-                col.dec_count();
+                self.constraints[ci].dec_count();
             }
         }
     }
@@ -76,21 +119,36 @@ impl Problem {
     pub fn uncover_column(&mut self, column_index: usize) {
         let mut col = &mut self.constraints[column_index];
 
-        // for r in col.iter() {
-        //     // For every node in the row (except the one from this
-        //     // constraing), remove the node from its column and
-        //     // decrement the corresponding count
-        //     for n in iter_row(&r, false).skip(1) {
-        //         let sn = n.upgrade().unwrap();
-        //         sn.borrow_mut().remove_from_column();
-        //         col.dec_count();
-        //     }
-        // }
+        for r in col.iter().rev() {
+            // For every node in the row (except the one from this
+            // constraing), remove the node from its column and
+            // decrement the corresponding count
+            for n in iter_row(&r).rev() {
+                let sn = n.upgrade().unwrap();
+                sn.borrow_mut().reinsert_into_column();
+                col.inc_count();
+            }
+        }
 
         col.uncover_header();
     }
 
     pub fn all_constraints(&self) -> slice::Iter<Column> {
         self.constraints.iter()
+    }
+
+
+    /// Testing function: assert the number of headers in the linked list is equal to the number of constraints.
+    pub fn assert_header_counts(&self) {
+        assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).count());
+        assert_eq!(self.constraints.len(), iter_row(&Rc::downgrade(&self.root)).rev().count());
+    }
+
+    pub fn print_remaining_constraint_counts(&self) {
+        for c in iter_row(&Rc::downgrade(&self.root)) {
+            let n = c.upgrade().unwrap();
+            let col = &self.constraints[n.borrow().column.unwrap()];
+            println!("column {}: {}", col.id(), col.count());
+        }
     }
 }
