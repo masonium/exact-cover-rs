@@ -169,11 +169,12 @@ pub struct Row<Action: Copy> {
 }
 
 impl<Action: Copy> Row<Action> {
+
     pub fn new(nodes: Vec<OwnedNode>, action: Action, index: usize) -> Self {
         let l = nodes.len();
         for i in l..(2*l) {
             let mut n = nodes[i % l].borrow_mut();
-            n.left = Rc::downgrade(&nodes[(i+1) % l]);
+            n.left = Rc::downgrade(&nodes[(i-1) % l]);
             n.right = Rc::downgrade(&nodes[(i+1) % l]);
             n.row = Some(index);
         }
