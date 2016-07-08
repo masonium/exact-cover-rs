@@ -45,6 +45,57 @@ impl DoubleEndedIterator for RowIterator {
     }
 }
 
+#[derive(Debug)]
+pub struct ColumnIterator {
+    curr_up: OwnedNode,
+    curr_down: OwnedNode
+}
+
+
+/// Iterate through the ndoes in a column, skipping the initial
+/// (header) node.
+impl ColumnIterator {
+    pub fn new(c: &OwnedNode) -> ColumnIterator {
+        ColumnIterator { curr_up: c.clone(),
+                         curr_down: c.clone() }
+    }
+}
+
+impl Iterator for ColumnIterator {
+    type Item = WeakNode;
+
+    fn next(&mut self) -> Option<WeakNode> {
+        let ref weak_next = self.curr_down.borrow().down();
+        self.curr_down = weak_next.upgrade().unwrap();
+
+        if self.curr_down.borrow().get_row() != self.curr_up.borrow().get_row() {
+            Some(weak_next.clone())
+        }
+        else {
+            None
+        }
+    }
+}
+
+impl DoubleEndedIterator for ColumnIterator {
+    fn next_back(&mut self) -> Option<WeakNode> {
+        let ref weak_next = self.curr_up.borrow().up();
+        self.curr_up = weak_next.upgrade().unwrap();
+
+        if self.curr_down.borrow().get_row() != self.curr_up.borrow().get_row() {
+            Some(weak_next.clone())
+        }
+        else {
+            None
+        }
+    }
+}
+
+/// Iterate down through the elements of a column.
+pub fn iter_col(header: &OwnedNode) -> ColumnIterator {
+    ColumnIterator::new(header)
+}
+
 /// Return an iterator to iterate through the elements in the row
 /// occupied by `node`.
 pub fn iter_row(node: &WeakNode ) -> RowIterator {

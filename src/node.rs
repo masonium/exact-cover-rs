@@ -227,12 +227,6 @@ pub fn prepend_up(root: &OwnedNode, node: &WeakNode) {
     }
 }
 
-pub fn column_index(node: &WeakNode) -> Option<ColumnIndex> {
-    let s = node.upgrade().unwrap();
-    let c = s.borrow().column;
-    c
-}
-
 #[derive(Debug)]
 pub struct Row<Action: Copy> {
     nodes: Vec<Rc<RefCell<NodeContents>>>,

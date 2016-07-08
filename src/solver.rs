@@ -1,7 +1,7 @@
 use problem::{Problem, Constraint, Action};
-use iter::{iter_row};
-use node::{column_index, get_header};
-use column::{iter_col, try_cover_column, cover_column};
+use iter::{iter_row, iter_col};
+use node::{get_header};
+use column::{try_cover_column, cover_column, uncover_column};
 
 pub struct Solver<A: Action, C: Constraint> {
     problem: Problem<A, C>,
@@ -11,6 +11,10 @@ pub struct Solver<A: Action, C: Constraint> {
 impl<A: Action, C: Constraint> Solver<A, C> {
     pub fn new(problem: Problem<A, C>) -> Solver<A, C> {
         Solver { problem: problem, partial_solution: Vec::new() }
+    }
+
+    pub fn problem(&self) -> &Problem<A, C> {
+        &self.problem
     }
 
     pub fn require_action(&mut self, action: A) -> Result<(), String> {
@@ -47,8 +51,6 @@ impl<A: Action, C: Constraint> Solver<A, C> {
             let con = constraint.unwrap();
 
             if con.borrow().get_count().unwrap() == 0 {
-                let con = self.problem.get_constraint_name( con.borrow().column.unwrap() );
-                println!("No actions for {:?}", con);
                 return false;
             }
 
@@ -60,7 +62,6 @@ impl<A: Action, C: Constraint> Solver<A, C> {
         // problem, if possible.
         for action in action_nodes {
             let a = self.problem.get_action(&action);
-            println!("Trying {:?}", a);
 
             solution.push(a);
 
@@ -69,12 +70,9 @@ impl<A: Action, C: Constraint> Solver<A, C> {
             }
 
             let sol = self.first_solution_aux(solution);
-            println!("Returning from {:?}", a);
 
             for c in iter_row(&action).rev() {
-                let ci = column_index(&c).unwrap();
-                println!("c{}", ci);
-                self.problem.uncover_column(column_index(&c).unwrap())
+                uncover_column(&get_header(&c).upgrade().unwrap())
             }
             if sol {
                 return true;
@@ -85,7 +83,6 @@ impl<A: Action, C: Constraint> Solver<A, C> {
         }
 
         //self.problem.uncover_column(cindex);
-        println!("return");
         false
     }
 }

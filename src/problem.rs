@@ -1,7 +1,5 @@
-pub use column::{iter_col};
-
-use node::{WeakNode, OwnedNode, NodeContents, Row, column_index};
-use iter::{iter_row};
+use node::{WeakNode, OwnedNode, NodeContents, Row};
+use iter::{iter_row, iter_col};
 use node::{prepend_left, prepend_up};
 use std::hash::Hash;
 use std::collections::{HashMap};
@@ -11,8 +9,8 @@ use std::fmt::Debug;
 pub trait Constraint : Debug + Clone + Hash + Eq {}
 impl<T: Debug + Clone + Hash + Eq> Constraint for T {}
 
-pub trait Action : Debug + Copy + Hash + Eq {}
-impl<T: Debug + Copy + Hash + Eq> Action for T {}
+pub trait Action : /*Debug + */Copy + Hash + Eq {}
+impl<T: /*Debug + */Copy + Hash + Eq> Action for T {}
 
 pub struct Problem<A: Action, C: Constraint> {
     root: OwnedNode,
@@ -33,6 +31,18 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         }
     }
 
+    /// Add a constraint if it doesn't already exist.
+    pub fn add_constraint(&mut self, constraint: &C) {
+        let curr_size = self.constraint_map.len();
+        if !self.constraint_map.contains_key(constraint) {
+            let c = NodeContents::new_header(Some(curr_size));
+            prepend_left(&mut self.root, &Rc::downgrade(&c));
+            self.constraints.push(c);
+            self.constraint_map.insert(constraint.clone(), curr_size);
+            self.constraint_names.insert(curr_size, constraint.clone());
+        }
+    }
+
     /// Add a new action, creating additional constraints on demand
     pub fn add_action(&mut self, a: A, clist: &[C]) {
         // Ignore actions that don't satisfy constraints
@@ -42,14 +52,15 @@ impl<A: Action, C: Constraint> Problem<A, C> {
 
         // extend the constraint list to accomodate all constraints, if necessary
         for x in clist {
-            let curr_size = self.constraint_map.len();
-            if !self.constraint_map.contains_key(x) {
-                let c = NodeContents::new_header(Some(curr_size));
-                prepend_left(&mut self.root, &Rc::downgrade(&c));
-                self.constraints.push(c);
-                self.constraint_map.insert(x.clone(), curr_size);
-                self.constraint_names.insert(curr_size, x.clone());
-            }
+            self.add_constraint(x);
+            // let curr_size = self.constraint_map.len();
+            // if !self.constraint_map.contains_key(x) {
+            //     let c = NodeContents::new_header(Some(curr_size));
+            //     prepend_left(&mut self.root, &Rc::downgrade(&c));
+            //     self.constraints.push(c);
+            //     self.constraint_map.insert(x.clone(), curr_size);
+            //     self.constraint_names.insert(curr_size, x.clone());
+            // }
         }
         // create a row from those nodes
         let new_id  = self.actions.len();
@@ -78,6 +89,10 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         iter_row(&Rc::downgrade(&self.root))
             .map( |ref node| self.get_column(&node) )
             .min_by_key( |ref c| c.borrow().get_count() )
+    }
+
+    pub fn num_constraints(&self) -> usize {
+        self.constraints.len()
     }
 
     pub fn get_constraint_name(&self, cindex: usize) -> &C {
@@ -126,7 +141,7 @@ impl<A: Action, C: Constraint> Problem<A, C> {
     /// Cover a column by remove each action that could remove that
     /// column, and remove the column from the header list.
     pub fn cover_column(&self, column_index: usize) {
-        println!("Covering c{}", column_index);
+        println!("Covering {:?}", self.constraint_names[column_index]);
         {
             let col = &self.constraints[column_index];
             col.borrow_mut().remove_from_row();
@@ -184,65 +199,4 @@ impl<A: Action, C: Constraint> Problem<A, C> {
             assert_eq!(iter_col(c).count(), c.borrow_mut().get_count().unwrap());
         }
     }
-
-    pub fn remaining_header_counts(&self) {
-        print!("Headers: ");
-        for x in iter_row(&Rc::downgrade(&self.root)) {
-            let c = self.get_column(&x).borrow();
-            print!("({:?}, {}); ", self.constraint_names[c.column.unwrap()], c.get_count().unwrap());
-        }
-        println!("");
-    }
-}
-
-#[test]
-fn row_rev_iterator() {
-    let mut p  = Problem::new();
-    p.add_action(0, &[0, 1, 2, 3]);
-    let r = &p.actions[0];
-    let mut iter = iter_row(&r.first_node()).rev();
-
-    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 3);
-    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 2);
-    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 1);
-}
-
-#[test]
-fn row_normal_iterator() {
-    let mut p = Problem::new();
-    p.add_action(0, &[0, 1, 2, 3]);
-    let r = &p.actions[0];
-    let mut iter = iter_row(&r.first_node());
-
-    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 1);
-    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 2);
-    assert_eq!(column_index(&iter.next().unwrap()).unwrap(), 3);
-}
-
-#[test]
-fn column_normal_iterator() {
-    let mut p = Problem::new();
-    p.add_action(0, &[0]);
-    p.add_action(1, &[0]);
-    p.add_action(2, &[0]);
-    let c = &p.constraints[0];
-    let mut iter = iter_col(&c);
-
-    assert_eq!(p.get_action(&iter.next().unwrap()), 0);
-    assert_eq!(p.get_action(&iter.next().unwrap()), 1);
-    assert_eq!(p.get_action(&iter.next().unwrap()), 2);
-}
-
-#[test]
-fn column_rev_iterator() {
-    let mut p = Problem::new();
-    p.add_action(0, &[0]);
-    p.add_action(1, &[0]);
-    p.add_action(2, &[0]);
-    let c = &p.constraints[0];
-    let mut iter = iter_col(&c).rev();
-
-    assert_eq!(p.get_action(&iter.next().unwrap()), 2);
-    assert_eq!(p.get_action(&iter.next().unwrap()), 1);
-    assert_eq!(p.get_action(&iter.next().unwrap()), 0);
 }
