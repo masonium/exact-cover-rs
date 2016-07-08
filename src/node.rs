@@ -1,10 +1,15 @@
 use std::cell::{RefCell};
 use std::rc::{Rc, Weak};
-use std::fmt;
-use std::mem;
 
 pub type ColumnIndex = usize;
 pub type RowIndex = usize;
+
+#[derive(Debug)]
+pub enum NodeExtra {
+    Row(RowIndex), // The node is an inner node, representing part of an action.
+    Count(usize),  // The node is a header for a constraints.
+    Root           // Root node.
+}
 
 #[derive(Debug)]
 pub struct NodeContents {
@@ -15,7 +20,8 @@ pub struct NodeContents {
     at_self: Weak<RefCell<NodeContents>>,
 
     pub column: Option<ColumnIndex>,
-    pub row: Option<RowIndex>
+    header: Weak<RefCell<NodeContents>>,
+    extra: NodeExtra
 }
 
 
@@ -23,13 +29,26 @@ pub type OwnedNode = Rc<RefCell<NodeContents>>;
 pub type WeakNode = Weak<RefCell<NodeContents>>;
 
 impl NodeContents {
+    pub fn new_header(col: Option<usize>) -> OwnedNode {
+        Self::new(col, None, NodeExtra::Count(0))
+    }
+
+    pub fn new_inner(header: &OwnedNode, row: usize) -> OwnedNode {
+        Self::new(header.borrow().column, Some(&Rc::downgrade(&header)), NodeExtra::Row(row))
+    }
+
+    pub fn new_root() -> OwnedNode {
+        Self::new(None, None, NodeExtra::Root)
+    }
+
     /// Create new node that circularly points to itself. 
-    pub fn new() -> Rc<RefCell<NodeContents>> {
+    fn new(col: Option<usize>, header: Option<&WeakNode>, e: NodeExtra) -> OwnedNode {
 	let rc = Rc::new(RefCell::new(NodeContents {
 	    up: Weak::new(), down: Weak::new(), 
             left: Weak::new(), right: Weak::new(),
             at_self: Weak::new(),
-            column: None, row: None
+            header: Weak::new(),
+            column: col, extra: e
 	}));
 
         {
@@ -40,22 +59,12 @@ impl NodeContents {
 	    nc.left = w.clone();
 	    nc.right = w.clone();
             nc.at_self = w.clone();
+            nc.header = match header {
+                Some(n) => n.clone(),
+                None => w.clone()
+            }
         }
 	rc
-    }
-    pub fn prepend_node(&mut self, node: &WeakNode) {
-        {
-            let r = (*node).upgrade().unwrap();
-            let mut n = r.borrow_mut();
-            n.down = self.at_self.clone();
-            n.up = self.up.clone();
-        }
-
-        {
-            let prev_up_weak = mem::replace(&mut self.up, node.clone());
-            let prev_up = prev_up_weak.upgrade().unwrap();
-            prev_up.borrow_mut().down = node.clone();
-        }
     }
 
     /// return the down link
@@ -76,6 +85,57 @@ impl NodeContents {
     /// return the right link
     pub fn right(&self) -> WeakNode {
         self.right.clone()
+    }
+
+    /// Return the count for a header node, and None for other nodes.
+    pub fn get_count(&self) -> Option<usize> {
+        match self.extra {
+            NodeExtra::Count(i) => Some(i),
+            _ => None
+        }
+    }
+
+    pub fn dec_count(&mut self) {
+        let c = match self.extra {
+            NodeExtra::Count(i) => i,
+            _ => return
+        };
+        self.extra = NodeExtra::Count(c-1);
+    }
+
+    pub fn inc_count(&mut self) {
+        let c = match self.extra {
+            NodeExtra::Count(i) => i,
+            _ => return
+        };
+        self.extra = NodeExtra::Count(c+1);
+    }
+
+    /// Return the associated row index for an inner node, and None
+    /// for other nodes.
+    pub fn get_row(&self) -> Option<usize> {
+        match self.extra {
+            NodeExtra::Row(i) => Some(i),
+            _ => None
+        }
+    }
+
+    /// Return the constraint header of this node.
+    pub fn get_header(&self) -> WeakNode {
+        self.header.clone()
+    }
+
+    /// Return true iff this is a header node and the column has
+    /// already been chosen.
+    pub fn is_already_chosen(&self) -> bool {
+        if let NodeExtra::Count(_) = self.extra {
+            let r = self.right.upgrade().unwrap();
+            let l = r.borrow().left().upgrade().unwrap();
+            let lc = l.borrow().column;
+            lc != self.column
+        } else {
+            false
+        }
     }
 
     /// Remove a node from its column
@@ -114,15 +174,20 @@ impl NodeContents {
 	(*rrc).borrow_mut().left = self.at_self.clone();
     }
 }
-
-impl fmt::Display for NodeContents {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({:?}, {:?})", self.row, self.column)
-    }
+pub fn get_header(n: &WeakNode) -> WeakNode {
+    let s = n.upgrade().unwrap();
+    let h = s.borrow().get_header();
+    h.clone()
 }
 
+// impl fmt::Display for NodeContents {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "({:?}, {:?})", self.row, self.column)
+//     }
+// }
+
 /// Prepend `node` to the left of `root.
-pub fn prepend_left(root: &mut OwnedNode, node: &WeakNode) {
+pub fn prepend_left(root: &OwnedNode, node: &WeakNode) {
     let l = (*node).upgrade().unwrap();
 
     {
@@ -142,7 +207,8 @@ pub fn prepend_left(root: &mut OwnedNode, node: &WeakNode) {
 
 }
 
-pub fn prepend_up(root: &mut OwnedNode, node: &WeakNode) {
+/// Prepend node above root.
+pub fn prepend_up(root: &OwnedNode, node: &WeakNode) {
     let u = (*node).upgrade().unwrap();
 
     {
@@ -161,6 +227,12 @@ pub fn prepend_up(root: &mut OwnedNode, node: &WeakNode) {
     }
 }
 
+pub fn column_index(node: &WeakNode) -> Option<ColumnIndex> {
+    let s = node.upgrade().unwrap();
+    let c = s.borrow().column;
+    c
+}
+
 #[derive(Debug)]
 pub struct Row<Action: Copy> {
     nodes: Vec<Rc<RefCell<NodeContents>>>,
@@ -176,7 +248,6 @@ impl<Action: Copy> Row<Action> {
             let mut n = nodes[i % l].borrow_mut();
             n.left = Rc::downgrade(&nodes[(i-1) % l]);
             n.right = Rc::downgrade(&nodes[(i+1) % l]);
-            n.row = Some(index);
         }
         Row {nodes: nodes, id: index, action: action }
     }
@@ -190,52 +261,6 @@ impl<Action: Copy> Row<Action> {
     }
     pub fn action(&self) -> Action {
         self.action
-    }
-}
-
-
-#[derive(Debug)]
-pub struct RowIterator {
-    curr_right: OwnedNode,
-    curr_left: OwnedNode
-}
-
-/// Iterate through them to the right (in normal order)
-/// until hitting the original node. Does not hit the first node.
-impl RowIterator {
-    fn new(node: &WeakNode) -> RowIterator {
-        let st = node.upgrade().unwrap();
-        RowIterator { curr_right: st.clone(), curr_left: st }
-    }
-}
-
-impl Iterator for RowIterator {
-    type Item = WeakNode;
-
-    fn next(&mut self) -> Option<WeakNode> {
-        let ref weak_next = self.curr_right.borrow().right.clone();
-        self.curr_right = weak_next.upgrade().unwrap();
-
-        if self.curr_right.borrow().column != self.curr_left.borrow().column {
-            Some(weak_next.clone())
-        }
-        else {
-            None
-        }
-    }
-}
-
-impl DoubleEndedIterator for RowIterator {
-    fn next_back(&mut self) -> Option<WeakNode> {
-        let ref weak_next = self.curr_left.borrow().left.clone();
-        self.curr_left = weak_next.upgrade().unwrap();
-
-        if self.curr_right.borrow().column != self.curr_left.borrow().column {
-            Some(weak_next.clone())
-        }
-        else {
-            None
-        }
     }
 }
 
@@ -261,21 +286,10 @@ impl Iterator for FullRowIterator {
         if self.started {
             if ret.borrow().column.unwrap() == self.head_column {
                 return None
-            } 
+            }
         }
         self.curr = { let r = self.curr.borrow().right(); r.upgrade().unwrap() };
         self.started = true;
         Some(Rc::downgrade(&ret))
     }
 }
-
-pub fn iter_row(node: &WeakNode ) -> RowIterator {
-    RowIterator::new(&node)
-}
-
-pub fn column_index(node: &WeakNode) -> Option<ColumnIndex> {
-    let s = node.upgrade().unwrap();
-    let c = s.borrow().column;
-    c
-}
-

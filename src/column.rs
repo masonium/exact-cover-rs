@@ -1,101 +1,7 @@
 use node::{NodeContents, OwnedNode, WeakNode};
 use node::{prepend_up};
 use std::rc::Rc;
-
-#[derive(Debug)]
-pub struct Column<C> {
-    head: OwnedNode,
-    count: usize,
-    id: usize,
-    constraint: C
-}
-
-impl<C> Column<C> {
-    pub fn new(constraint: C, index: usize) -> Self {
-        let nc = NodeContents::new();
-        {
-            let mut c = nc.borrow_mut();
-            c.column = Some(index);
-        }
-        Column { head: nc, count: 0, id: index, constraint: constraint }
-    }
-
-    pub fn id(&self) -> usize {
-        self.id
-    }
-
-    pub fn root(&self) -> WeakNode {
-        Rc::downgrade(&self.head)
-    }
-
-    pub fn count(&self) -> usize {
-        self.count
-    }
-
-    pub fn constraint(&self) -> &C {
-        &self.constraint
-    }
-
-    /// Create a new node append to the end of the column, and return.
-    pub fn append_new(&mut self) -> OwnedNode {
-        let n = NodeContents::new();
-        self.append( &n);
-        n.clone()
-    }
-
-
-    fn append(&mut self, node: &OwnedNode ) {
-        {
-            node.borrow_mut().column = Some(self.id);
-        }
-
-        prepend_up(&mut self.head, &Rc::downgrade(&node));
-        self.count += 1;
-    }
-
-    /// Return true iff this column has already been satisfied as a
-    /// constraint.
-    pub fn is_already_chosen(&self) -> bool {
-        let wr = self.head.borrow().right();
-        let r = wr.upgrade().unwrap();
-        let l = r.borrow().left().upgrade().unwrap();
-        let lc = l.borrow().column;
-        match lc {
-            Some(x) if x == self.id => false,
-            _ => true
-        }
-    }
-
-    /// Cover the header node of the column, removing it from the
-    /// constraint list.
-    pub fn cover_header(&self) {
-        self.head.borrow_mut().remove_from_row();
-    }
-
-    /// Uncover the header node of the column, adding it back to the
-    /// constraint list.
-    pub fn uncover_header(&self) {
-        self.head.borrow_mut().reinsert_into_row();
-    }
-
-    pub fn iter(&self) -> ColumnIterator {
-        ColumnIterator::new(&self)
-    }
-
-    pub fn get_count(&self) -> usize {
-        return self.count
-    }
-
-    pub fn dec_count(&mut self) {
-        self.count -= 1
-    }
-
-    pub fn inc_count(&mut self) {
-        self.count += 1
-    }
-}
-
-
+use iter::{iter_row};
 
 #[derive(Debug)]
 pub struct ColumnIterator {
@@ -103,12 +9,16 @@ pub struct ColumnIterator {
     curr_down: OwnedNode
 }
 
+pub fn iter_col(header: &OwnedNode) -> ColumnIterator {
+    ColumnIterator::new(header)
+}
+
 /// Iterate through the ndoes in a column, skipping the initial
 /// (header) node.
 impl ColumnIterator {
-    pub fn new<C>(c: &Column<C>) -> ColumnIterator {
-        ColumnIterator { curr_up: c.head.clone(),
-                         curr_down: c.head.clone() }
+    pub fn new(c: &OwnedNode) -> ColumnIterator {
+        ColumnIterator { curr_up: c.clone(),
+                         curr_down: c.clone() }
     }
 }
 
@@ -119,7 +29,7 @@ impl Iterator for ColumnIterator {
         let ref weak_next = self.curr_down.borrow().down();
         self.curr_down = weak_next.upgrade().unwrap();
 
-        if self.curr_down.borrow().row != self.curr_up.borrow().row {
+        if self.curr_down.borrow().get_row() != self.curr_up.borrow().get_row() {
             Some(weak_next.clone())
         }
         else {
@@ -133,11 +43,72 @@ impl DoubleEndedIterator for ColumnIterator {
         let ref weak_next = self.curr_up.borrow().up();
         self.curr_up = weak_next.upgrade().unwrap();
 
-        if self.curr_down.borrow().row != self.curr_up.borrow().row {
+        if self.curr_down.borrow().get_row() != self.curr_up.borrow().get_row() {
             Some(weak_next.clone())
         }
         else {
             None
         }
+    }
+}
+
+pub fn try_cover_column(col: &OwnedNode) -> TempCoverColumn {
+    TempCoverColumn::new(col)
+}
+
+pub fn cover_column(col: &OwnedNode) {
+//    println!("Covering c{}", column_index);
+    col.borrow_mut().remove_from_row();
+
+    for r in iter_col(col) {
+        // For every node in the row (except the one from this
+        // constraint), remove the node from its column and
+        // decrement the corresponding count
+        for n in iter_row(&r) {
+            let sn = n.upgrade().unwrap();
+            //let ci = sn.borrow().column.unwrap();
+
+            sn.borrow_mut().remove_from_column();
+            let header = sn.borrow().get_header().upgrade().unwrap();
+            header.borrow_mut().dec_count();
+        }
+    }
+}
+
+pub fn uncover_column(col: &OwnedNode) {
+//    println!("Covering c{}", column_index);
+
+    for r in iter_col(col).rev() {
+        // For every node in the row (except the one from this
+        // constraint), reinsert node into its column and
+        // increment that column's count.
+        for n in iter_row(&r).rev() {
+            let sn = n.upgrade().unwrap();
+            //let ci = sn.borrow().column.unwrap();
+
+            sn.borrow_mut().reinsert_into_column();
+            let header = sn.borrow().get_header().upgrade().unwrap();
+            header.borrow_mut().inc_count();
+        }
+    }
+
+    col.borrow_mut().reinsert_into_row();
+
+}
+
+pub struct TempCoverColumn<'a> {
+    node: &'a OwnedNode,
+}
+
+impl<'a> TempCoverColumn<'a> {
+    pub fn new(node: &'a OwnedNode) -> TempCoverColumn<'a> {
+        cover_column(node);
+        TempCoverColumn { node: node }
+    }
+}
+
+impl<'a> Drop for TempCoverColumn<'a> {
+    fn drop(&mut self) {
+        uncover_column(&self.node);
     }
 }

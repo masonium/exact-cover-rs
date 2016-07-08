@@ -1,7 +1,7 @@
 extern crate dancing_links;
 
-use dancing_links::problem::{Problem};
-use dancing_links::solver::{Solver};
+use dancing_links::{Problem};
+use dancing_links::{Solver};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct BasicAction(usize);
@@ -20,7 +20,7 @@ fn partial_solve_fail() {
 }
 
 #[test]
-fn partial_solve_succeses() {
+fn full_presolve() {
     let mut p = Problem::new();
     p.add_action(0, &["a"]);
     p.add_action(1, &["a", "b", "c"]);
@@ -30,7 +30,32 @@ fn partial_solve_succeses() {
     let mut solver = Solver::new(p);
     assert!(solver.require_action(1).is_ok());
     assert!(solver.require_action(3).is_ok());
+
     let res: Vec<usize> = vec![1, 3];
-    let sol = solver.first_solution();
-    assert_eq!(sol.unwrap().len(), res.len());
+    let sol = solver.first_solution().unwrap();
+    assert_eq!(sol.len(), res.len());
+
+    for x in &res {
+        assert!(sol.iter().find(|y| *y == x).is_some())
+    }
+}
+
+#[test]
+fn partial_presolve() {
+    let mut p = Problem::new();
+    p.add_action(0, &["a"]);
+    p.add_action(1, &["a", "b", "c"]);
+    p.add_action(2, &["c", "e"]);
+    p.add_action(3, &["d", "e"]);
+
+    let mut solver = Solver::new(p);
+    assert!(solver.require_action(1).is_ok());
+
+    let res: Vec<usize> = vec![1, 3];
+    let sol = solver.first_solution().unwrap();
+    assert_eq!(sol.len(), res.len());
+
+    for x in &res {
+        assert!(sol.iter().find(|y| *y == x).is_some())
+    }
 }

@@ -1,7 +1,7 @@
 extern crate dancing_links;
 
-use dancing_links::problem::{Problem};
-use dancing_links::solver::{Solver};
+use dancing_links::{Problem};
+use dancing_links::{Solver};
 
 #[test]
 fn count_cells() {
