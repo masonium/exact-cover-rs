@@ -1,4 +1,4 @@
-# exact-cover #
+# exact-cover [![Build Status](https://travis-ci.org/masonium/exact-cover-rs.svg?branch=master)](https://travis-ci.org/masonium/exact-cover-rs) #
 
 `exact-cover` is a rust crate for solving exact cover
 [exact cover](https://en.wikipedia.org/wiki/Exact_cover)
