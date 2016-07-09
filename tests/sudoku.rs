@@ -1,6 +1,6 @@
 extern crate dancing_links;
 
-use dancing_links::instances::sudoku::{sudoku_solver, sudoku_problem};
+use dancing_links::instances::sudoku::{sudoku_solver, sudoku_problem, fill_from_solution};
 use dancing_links::{Solver};
 
 
@@ -44,6 +44,16 @@ fn easy1() {
              1, 6, 0, 0, 7, 3, 0, 8, 0,
              0, 0, 0, 0, 1, 0, 3, 0, 9];
 
+    let real_solution = [7, 4, 5, 8, 6, 2, 9, 3, 1,
+                         6, 3, 1, 7, 9, 4, 8, 5, 2,
+                         8, 2, 9, 1, 3, 5, 7, 4, 6,
+                         3, 9, 8, 2, 5, 7, 1, 6, 4,
+                         2, 1, 6, 3, 4, 9, 5, 7, 8,
+                         5, 7, 4, 6, 8, 1, 2, 9, 3,
+                         9, 5, 3, 4, 2, 8, 6, 1, 7,
+                         1, 6, 2, 9, 7, 3, 4, 8, 5,
+                         4, 8, 7, 5, 1, 6, 3, 2, 9];
+
     let s = sudoku_solver(&r);
 
     if let Err(ref x) = s {
@@ -52,7 +62,12 @@ fn easy1() {
 
 
     assert!(s.is_ok());
-    assert!(s.unwrap().first_solution().is_some());
+    let sol = s.unwrap().first_solution().unwrap();
+    let x: Vec<usize> = fill_from_solution(9, &sol).iter().flat_map(|x| x.iter() ).map(|x| *x).collect();
+
+    for i in 0..81 {
+        assert_eq!(x[i], real_solution[i]);
+    }
 }
 
 #[test]
