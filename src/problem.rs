@@ -1,16 +1,16 @@
 use node::{WeakNode, OwnedNode, NodeContents, Row};
-use iter::{iter_row, iter_col};
+use iter::{iter_row};
 use node::{prepend_left, prepend_up};
 use std::hash::Hash;
 use std::collections::{HashMap};
 use std::rc::{Rc};
-use std::fmt::Debug;
+use cover::{cover_column};
 
-pub trait Constraint : Debug + Clone + Hash + Eq {}
-impl<T: Debug + Clone + Hash + Eq> Constraint for T {}
+pub trait Constraint : Clone + Hash + Eq {}
+impl<T: Clone + Hash + Eq> Constraint for T {}
 
-pub trait Action : /*Debug + */Copy + Hash + Eq {}
-impl<T: /*Debug + */Copy + Hash + Eq> Action for T {}
+pub trait Action : Copy + Hash + Eq {}
+impl<T: Copy + Hash + Eq> Action for T {}
 
 pub struct Problem<A: Action, C: Constraint> {
     root: OwnedNode,
@@ -43,25 +43,24 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         }
     }
 
-    /// Add a new action, creating additional constraints on demand
+    /// Add a new action, creating additional constraints on
+    /// demand. Actions must not already have already existed.
     pub fn add_action(&mut self, a: A, clist: &[C]) {
         // Ignore actions that don't satisfy constraints
         if clist.is_empty() {
             return
         }
 
+        // Ignore actions that are already present.
+        if self.action_map.contains_key(&a) {
+            return
+        }
+
         // extend the constraint list to accomodate all constraints, if necessary
         for x in clist {
             self.add_constraint(x);
-            // let curr_size = self.constraint_map.len();
-            // if !self.constraint_map.contains_key(x) {
-            //     let c = NodeContents::new_header(Some(curr_size));
-            //     prepend_left(&mut self.root, &Rc::downgrade(&c));
-            //     self.constraints.push(c);
-            //     self.constraint_map.insert(x.clone(), curr_size);
-            //     self.constraint_names.insert(curr_size, x.clone());
-            // }
         }
+
         // create a row from those nodes
         let new_id  = self.actions.len();
 
@@ -79,11 +78,6 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         self.action_map.insert(a, new_id);
     }
 
-    // Count the number of inner cells in the entire matrix
-    pub fn count_cells(&self) -> usize {
-        return self.constraints.iter().map(|ref x| { x.borrow().get_count().unwrap() }).fold(0, |x, y| { x + y })
-    }
-
     /// Choose the column with the smallest count
     pub fn choose_column(&self) -> Option<&OwnedNode> {
         iter_row(&Rc::downgrade(&self.root))
@@ -91,12 +85,9 @@ impl<A: Action, C: Constraint> Problem<A, C> {
             .min_by_key( |ref c| c.borrow().get_count() )
     }
 
+    /// Return the number of constraints currently in the problem.
     pub fn num_constraints(&self) -> usize {
         self.constraints.len()
-    }
-
-    pub fn get_constraint_name(&self, cindex: usize) -> &C {
-        &self.constraint_names[cindex]
     }
 
     /// Return the column associated with a node.
@@ -131,48 +122,10 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         };
 
         for n in iter {
-            let ci = self.get_column(&n).borrow().column.unwrap();
-            self.cover_column(ci);
+            //let ci = self.get_column(&n).borrow().column.unwrap();
+            cover_column(self.get_column(&n));
         }
 
         Ok(())
-    }
-
-    /// Cover a column by remove each action that could remove that
-    /// column, and remove the column from the header list.
-    pub fn cover_column(&self, column_index: usize) {
-        {
-            let col = &self.constraints[column_index];
-            col.borrow_mut().remove_from_row();
-        }
-
-        let iter = {
-            let col = &self.constraints[column_index];
-            iter_col(col)
-        };
-
-        for r in iter {
-            // For every node in the row (except the one from this
-            // constraint), remove the node from its column and
-            // decrement the corresponding count
-            for n in iter_row(&r) {
-                let sn = n.upgrade().unwrap();
-                let ci = sn.borrow().column.unwrap();
-
-                sn.borrow_mut().remove_from_column();
-                self.constraints[ci].borrow_mut().dec_count();
-            }
-        }
-
-        self.assert_header_counts();
-    }
-
-    /// Testing function: assert the number of headers in the linked
-    /// list is equal to the number of constraints.
-    pub fn assert_header_counts(&self) {
-        for x in iter_row(&Rc::downgrade(&self.root)) {
-            let c = self.get_column(&x);
-            assert_eq!(iter_col(c).count(), c.borrow_mut().get_count().unwrap());
-        }
     }
 }

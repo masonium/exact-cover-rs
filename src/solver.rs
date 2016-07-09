@@ -1,7 +1,6 @@
 use problem::{Problem, Constraint, Action};
-use iter::{iter_row, iter_col};
-use node::{get_header};
-use cover::{try_cover_column, cover_column, uncover_column};
+use iter::{iter_col};
+use cover::{try_cover_column, try_cover_row};
 
 pub struct Solver<A: Action, C: Constraint> {
     problem: Problem<A, C>,
@@ -40,7 +39,7 @@ impl<A: Action, C: Constraint> Solver<A, C> {
     }
 
     fn first_solution_aux(&self, solution: &mut Vec<A>) -> bool {
-        let (tc, action_nodes) = {
+        let (_tc, action_nodes) = {
             let constraint = self.problem.choose_column();
             if let None = constraint {
                 solution.extend_from_slice(&self.partial_solution);
@@ -64,19 +63,12 @@ impl<A: Action, C: Constraint> Solver<A, C> {
 
             solution.push(a);
 
-            for c in iter_row(&action) {
-                cover_column(&get_header(&c).upgrade().unwrap())
-            }
-
+            let _cover = try_cover_row(&action);
             let sol = self.first_solution_aux(solution);
 
-            for c in iter_row(&action).rev() {
-                uncover_column(&get_header(&c).upgrade().unwrap())
-            }
             if sol {
                 return true;
             }
-
 
             solution.pop();
         }

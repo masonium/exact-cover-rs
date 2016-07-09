@@ -1,4 +1,4 @@
-use node::{OwnedNode};
+use node::{get_header, WeakNode, OwnedNode};
 use iter::{iter_row, iter_col};
 
 /// Structure to temporarily cover a column. The column is
@@ -59,4 +59,31 @@ pub fn uncover_column(col: &OwnedNode) {
 
     col.borrow_mut().reinsert_into_row();
 
+}
+
+pub struct TempCoverRow<'a> {
+    node: &'a WeakNode
+}
+
+impl<'a> TempCoverRow<'a> {
+    pub fn new(node: &'a WeakNode) -> TempCoverRow<'a> {
+        for c in iter_row(&node) {
+            cover_column(&get_header(&c).upgrade().unwrap())
+        }
+
+        TempCoverRow {node: node}
+    }
+}
+
+impl<'a> Drop for TempCoverRow<'a> {
+    fn drop(&mut self) {
+        for c in iter_row(self.node).rev() {
+            uncover_column(&get_header(&c).upgrade().unwrap())
+        }
+
+    }
+}
+
+pub fn try_cover_row(row: &WeakNode) -> TempCoverRow {
+    TempCoverRow::new(row)
 }
