@@ -1,6 +1,9 @@
 use problem::{Problem};
 use solver::{Solver};
 
+/// A `SudokuAction` is filling a particular square (identified by
+/// `row` and `column`) with a particular number. An nxn sudoku will
+/// have n^3 possible actions, of which n^2 form a particular solution.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct SudokuAction {
     pub cell: usize,
@@ -8,7 +11,7 @@ pub struct SudokuAction {
     pub col: usize
 }
 
-/// Locations are 0-indexed.
+/// Constraint `Location`s are 0-indexed.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Location {
     Row(usize),
@@ -16,12 +19,17 @@ pub enum Location {
     Box(usize, usize)
 }
 
+/// A `Constraint` encodes the existence and uniqueness constraints
+/// that a sudoku solution must satisfy.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SudokuConstraint {
+    /// Existence constraints enforce that every square must be filled in.
     Existence(usize, usize),
+
+    /// Unique constraints that enforce that each number (from 1, ..,
+    /// n) must be occurs exactly once in each column, row, and block.
     Uniqueness(usize, Location),
 }
-
 
 impl SudokuAction {
     pub fn new(v: usize, r: usize, c: usize) -> SudokuAction {
@@ -52,7 +60,9 @@ fn isqrt(n: usize) -> usize {
     return 0
 }
 
-/// Return a fully-specified sudoku problem of the given size.
+/// Return a fully-specified sudoku problem of the given size `n`. `n`
+/// must be a perfect square; otherwise, `sudoku_problem()` will
+/// return None.
 pub fn sudoku_problem(n: usize) -> Option<SudokuProblem> {
     let mut p = Problem::new();
     let box_size = isqrt(n);
@@ -98,13 +108,14 @@ pub fn sudoku_solver(cells: &[usize]) -> Result<SudokuSolver, String> {
                 }
             }
         }
+    }
 
-}
     Ok(s)
 }
 
-/// Given a list of actions, return an array that represents the solved sudoku.
-pub fn fill_from_solution(n: usize, actions: &[SudokuAction]) -> Vec<Vec<usize>> {
+/// Given a solution (as a list of actions), return an vector of vectors that
+/// represents the solved sudoku.
+pub fn solution_as_matrix(n: usize, actions: &[SudokuAction]) -> Vec<Vec<usize>> {
     let mut sol: Vec<Vec<usize>> = (0..n).map(|_| vec![0; n]).collect();
     for action in actions {
         sol[action.row][action.col] = action.cell;

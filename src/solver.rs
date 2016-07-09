@@ -2,6 +2,8 @@ use problem::{Problem, Constraint, Action};
 use iter::{iter_col};
 use cover::{try_cover_column, try_cover_row};
 
+/// A `Solver` consumes a problem and computes solutions to the exact
+/// cover problem.
 pub struct Solver<A: Action, C: Constraint> {
     problem: Problem<A, C>,
     partial_solution: Vec<A>,
@@ -16,6 +18,12 @@ impl<A: Action, C: Constraint> Solver<A, C> {
         &self.problem
     }
 
+    /// Specify that an action must be present in the final solution.
+    ///
+    /// If no solution contains the set of required actions, then any
+    /// solution-returning method will return no solution, even if
+    /// another solution (that doesn't contain the require actions)
+    /// would otherewise exits.
     pub fn require_action(&mut self, action: A) -> Result<(), String> {
         match self.problem.require_row(action) {
             Ok(r) => {
@@ -28,8 +36,15 @@ impl<A: Action, C: Constraint> Solver<A, C> {
         }
     }
 
-    /// Return the first solution. .
-    pub fn first_solution(&mut self) -> Option<Vec<A>> {
+    /// Return a solution to the problem that includes any previously
+    /// required actions (set via `require_actions()`), if one
+    /// exists. 
+    ///
+    /// 'First' is an arbitrary qualifier; there are no guarantees
+    /// that, for instance, the lexographically smallest action-set is
+    /// returned. It is only guaranteed that, if at least one solution
+    /// exists, a solution will be returned.
+    pub fn first_solution(&self) -> Option<Vec<A>> {
         let mut sol: Vec<A> = Vec::new();
         if self.first_solution_aux(&mut sol){
             Some(sol)
@@ -73,7 +88,6 @@ impl<A: Action, C: Constraint> Solver<A, C> {
             solution.pop();
         }
 
-        //self.problem.uncover_column(cindex);
         false
     }
 }

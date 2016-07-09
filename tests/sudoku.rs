@@ -1,6 +1,6 @@
 extern crate dancing_links;
 
-use dancing_links::instances::sudoku::{sudoku_solver, sudoku_problem, fill_from_solution};
+use dancing_links::instances::sudoku::{sudoku_solver, sudoku_problem, SudokuAction, solution_as_matrix};
 use dancing_links::{Solver};
 
 
@@ -9,7 +9,7 @@ fn empty() {
     for i in 1..4 {
         let n = i*i;
         let p = sudoku_problem(n);
-        let mut s = Solver::new(p.unwrap());
+        let s = Solver::new(p.unwrap());
 
         assert_eq!(s.problem().num_constraints(), 4*n*n);
 
@@ -19,18 +19,9 @@ fn empty() {
     }
 }
 
-// #[test]
-// fn trivial() {
-//     let r: Vec<usize> = (1..10).collect();
-//     let v = r.iter().flat_map().collect();
-//     let s = sudoku_solver(&v);
-//     if let Err(ref x) = s {
-//         println!("{}", x);
-//     }
-
-//     assert!(s.is_ok());
-//     assert!(s.unwrap().first_solution().is_some());
-// }
+fn solution_as_array(sol: &Vec<SudokuAction>) -> Vec<usize> {
+    solution_as_matrix(9, &sol).iter().flat_map(|x| x.iter() ).map(|x| *x).collect()
+}
 
 #[test]
 fn easy1() {
@@ -63,7 +54,7 @@ fn easy1() {
 
     assert!(s.is_ok());
     let sol = s.unwrap().first_solution().unwrap();
-    let x: Vec<usize> = fill_from_solution(9, &sol).iter().flat_map(|x| x.iter() ).map(|x| *x).collect();
+    let x = solution_as_array(&sol);
 
     for i in 0..81 {
         assert_eq!(x[i], real_solution[i]);
@@ -82,6 +73,16 @@ fn evil1() {
              0, 0, 0, 0, 7, 0, 0, 8, 0,
              0, 1, 0, 0, 0, 9, 0, 5, 0];
 
+    let real_solution = [3, 2, 9, 8, 6, 4, 5, 1, 7,
+                         1, 6, 8, 7, 5, 3, 2, 4, 9,
+                         5, 4, 7, 9, 1, 2, 6, 3, 8,
+                         6, 5, 3, 1, 9, 7, 8, 2, 4,
+                         7, 9, 2, 5, 4, 8, 1, 6, 3,
+                         4, 8, 1, 3, 2, 6, 9, 7, 5,
+                         2, 7, 5, 4, 8, 1, 3, 9, 6,
+                         9, 3, 6, 2, 7, 5, 4, 8, 1,
+                         8, 1, 4, 6, 3, 9, 7, 5, 2];
+
     let s = sudoku_solver(&r);
 
     if let Err(ref x) = s {
@@ -90,5 +91,10 @@ fn evil1() {
 
 
     assert!(s.is_ok());
-    assert!(s.unwrap().first_solution().is_some());
+    let sol = s.unwrap().first_solution().unwrap();
+    let res = solution_as_array(&sol);
+    for i in 0..81 {
+        assert_eq!(res[i], real_solution[i]);
+    }
+
 }

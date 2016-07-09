@@ -61,15 +61,25 @@ pub fn uncover_column(col: &OwnedNode) {
 
 }
 
+pub fn cover_row(node: &WeakNode) {
+    for c in iter_row(node) {
+        cover_column(&get_header(&c).upgrade().unwrap())
+    }
+}
+
+pub fn uncover_row(node: &WeakNode) {
+    for c in iter_row(node).rev() {
+        uncover_column(&get_header(&c).upgrade().unwrap())
+    }
+}
+
 pub struct TempCoverRow<'a> {
     node: &'a WeakNode
 }
 
 impl<'a> TempCoverRow<'a> {
     pub fn new(node: &'a WeakNode) -> TempCoverRow<'a> {
-        for c in iter_row(&node) {
-            cover_column(&get_header(&c).upgrade().unwrap())
-        }
+        cover_row(node);
 
         TempCoverRow {node: node}
     }
@@ -77,10 +87,7 @@ impl<'a> TempCoverRow<'a> {
 
 impl<'a> Drop for TempCoverRow<'a> {
     fn drop(&mut self) {
-        for c in iter_row(self.node).rev() {
-            uncover_column(&get_header(&c).upgrade().unwrap())
-        }
-
+        uncover_row(self.node);
     }
 }
 

@@ -4,6 +4,11 @@ use std::rc::{Rc, Weak};
 pub type ColumnIndex = usize;
 pub type RowIndex = usize;
 
+/// `NodeExtra` contains the information specific to a node's
+/// type. For instance, only constraint (column) header nodes require
+/// a count of how many nodes are contained in the column. The type of
+/// node (header, inner, or root) can be directly inferred by the enum
+/// value.
 #[derive(Debug)]
 pub enum NodeExtra {
     Row(RowIndex), // The node is an inner node, representing part of an action.
@@ -11,24 +16,37 @@ pub enum NodeExtra {
     Root           // Root node.
 }
 
+
+/// A `Node` represents multiple types in the DLX algorithm. Most nodes
+/// are 'inner' nodes, essentially representing 1's in the sparse
+/// matrix representation of the problem. Headers `Node`s contain a
+/// current count of how many actions can be used to satisfy the
+/// constaint.
+///
+/// Throughout the code, nodes are almost never dealt with
+/// directly. Instead, nodes are handled either through `WeakNode`s or
+/// `OwnedNode`s.
+///
+/// `Node`s exclusively store neighbor pointers as `WeakNode`s to
+/// prevent memory leaks via cyclical references.
 #[derive(Debug)]
-pub struct NodeContents {
-    up: Weak<RefCell<NodeContents>>,
-    down: Weak<RefCell<NodeContents>>,
-    left: Weak<RefCell<NodeContents>>,
-    right: Weak<RefCell<NodeContents>>,
-    at_self: Weak<RefCell<NodeContents>>,
+pub struct Node {
+    up: Weak<RefCell<Node>>,
+    down: Weak<RefCell<Node>>,
+    left: Weak<RefCell<Node>>,
+    right: Weak<RefCell<Node>>,
+    at_self: Weak<RefCell<Node>>,
 
     pub column: Option<ColumnIndex>,
-    header: Weak<RefCell<NodeContents>>,
+    header: Weak<RefCell<Node>>,
     extra: NodeExtra
 }
 
 
-pub type OwnedNode = Rc<RefCell<NodeContents>>;
-pub type WeakNode = Weak<RefCell<NodeContents>>;
+pub type OwnedNode = Rc<RefCell<Node>>;
+pub type WeakNode = Weak<RefCell<Node>>;
 
-impl NodeContents {
+impl Node {
     pub fn new_header(col: Option<usize>) -> OwnedNode {
         Self::new(col, None, NodeExtra::Count(0))
     }
@@ -43,7 +61,7 @@ impl NodeContents {
 
     /// Create new node that circularly points to itself. 
     fn new(col: Option<usize>, header: Option<&WeakNode>, e: NodeExtra) -> OwnedNode {
-	let rc = Rc::new(RefCell::new(NodeContents {
+	let rc = Rc::new(RefCell::new(Node {
 	    up: Weak::new(), down: Weak::new(), 
             left: Weak::new(), right: Weak::new(),
             at_self: Weak::new(),
@@ -180,7 +198,7 @@ pub fn get_header(n: &WeakNode) -> WeakNode {
     h.clone()
 }
 
-// impl fmt::Display for NodeContents {
+// impl fmt::Display for Node {
 //     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 //         write!(f, "({:?}, {:?})", self.row, self.column)
 //     }
@@ -229,13 +247,12 @@ pub fn prepend_up(root: &OwnedNode, node: &WeakNode) {
 
 #[derive(Debug)]
 pub struct Row<Action: Copy> {
-    nodes: Vec<Rc<RefCell<NodeContents>>>,
+    nodes: Vec<Rc<RefCell<Node>>>,
     id: usize,
     action: Action
 }
 
 impl<Action: Copy> Row<Action> {
-
     pub fn new(nodes: Vec<OwnedNode>, action: Action, index: usize) -> Self {
         let l = nodes.len();
         for i in l..(2*l) {
@@ -244,10 +261,6 @@ impl<Action: Copy> Row<Action> {
             n.right = Rc::downgrade(&nodes[(i+1) % l]);
         }
         Row {nodes: nodes, id: index, action: action }
-    }
-
-    pub fn first_node(&self) -> WeakNode {
-        Rc::downgrade(&self.nodes[0])
     }
 
     pub fn iter(&self) -> FullRowIterator {

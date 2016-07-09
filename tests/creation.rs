@@ -10,6 +10,6 @@ fn solve_problem() {
     p.add_action(1, &[3, 4]);
     p.add_action(2, &[2, 4]);
 
-    let mut solver = Solver::new(p);
+    let solver = Solver::new(p);
     assert!(solver.first_solution().is_some());
 }

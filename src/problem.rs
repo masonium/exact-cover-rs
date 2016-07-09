@@ -1,4 +1,4 @@
-use node::{WeakNode, OwnedNode, NodeContents, Row};
+use node::{WeakNode, OwnedNode, Node, Row};
 use iter::{iter_row};
 use node::{prepend_left, prepend_up};
 use std::hash::Hash;
@@ -12,21 +12,36 @@ impl<T: Clone + Hash + Eq> Constraint for T {}
 pub trait Action : Copy + Hash + Eq {}
 impl<T: Copy + Hash + Eq> Action for T {}
 
+/// A `Problem` represents an exact cover problem. The problem is
+/// defined as a set of (primary) constraints which must all be
+/// satisfied, and a set of actions, each of which satisfies a subset
+/// of constraints.
+///
+/// Typically, one will add actions to the problem by the
+/// `add_actions()` method. Constraints that haven't been previously
+/// defined are implicitly added via `add_actions()`. You can also
+/// explicitly add constraints via the `add_constraint()` function,
+/// but this is typically unnecesssary..
+///
+/// Internally, a problem is represented as a sparse 0-1 matrix, where
+/// each row represents an action and each column represents a
+/// constraint. To facility solving via Algorithm X, the 1-entries of
+/// the matrix are stored `Node`s, with each entry linked to previous
+/// and next column entries (named 'up' and 'down', resp.) and row
+/// entries (name 'left' and 'right', respectively).
 pub struct Problem<A: Action, C: Constraint> {
     root: OwnedNode,
-    pub constraints: Vec<OwnedNode>,
-    pub actions: Vec<Row<A>>,
+    constraints: Vec<OwnedNode>,
+    actions: Vec<Row<A>>,
     constraint_map: HashMap<C, usize>,
-    constraint_names: Vec<C>,
     action_map: HashMap<A, usize>
 }
 
 impl<A: Action, C: Constraint> Problem<A, C> {
     pub fn new() -> Problem<A, C> {
         Problem { constraints: Vec::new(), actions: Vec::new(),
-                  root: NodeContents::new_root(),
+                  root: Node::new_root(),
                   constraint_map: HashMap::new(),
-                  constraint_names: Vec::new(),
                   action_map: HashMap::new()
         }
     }
@@ -35,11 +50,10 @@ impl<A: Action, C: Constraint> Problem<A, C> {
     pub fn add_constraint(&mut self, constraint: &C) {
         let curr_size = self.constraint_map.len();
         if !self.constraint_map.contains_key(constraint) {
-            let c = NodeContents::new_header(Some(curr_size));
+            let c = Node::new_header(Some(curr_size));
             prepend_left(&mut self.root, &Rc::downgrade(&c));
             self.constraints.push(c);
             self.constraint_map.insert(constraint.clone(), curr_size);
-            self.constraint_names.insert(curr_size, constraint.clone());
         }
     }
 
@@ -68,7 +82,7 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         let nodes = clist.iter().map(|x| {
             let ci = *self.constraint_map.get(x).unwrap();
             let c = &self.constraints[ci];
-            let n = NodeContents::new_inner(&c, new_id);
+            let n = Node::new_inner(&c, new_id);
             prepend_up(c, &Rc::downgrade(&n));
             c.borrow_mut().inc_count();
             n
