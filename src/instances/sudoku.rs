@@ -17,9 +17,9 @@ pub enum Location {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct SudokuConstraint {
-    cell: usize,
-    location: Location
+pub enum SudokuConstraint {
+    Existence(usize, usize),
+    Uniqueness(usize, Location),
 }
 
 
@@ -28,10 +28,11 @@ impl SudokuAction {
         SudokuAction{ cell: v, row: r, col: c }
     }
 
-    pub fn constraints(&self, box_size: usize) -> [SudokuConstraint; 3] {
-        [SudokuConstraint{ cell: self.cell, location: Location::Row(self.row) },
-         SudokuConstraint{ cell: self.cell, location: Location::Col(self.col) },
-         SudokuConstraint{ cell: self.cell, location: Location::Box(self.row / box_size, self.col / box_size) }]
+    pub fn constraints(&self, box_size: usize) -> [SudokuConstraint; 4] {
+        [SudokuConstraint::Uniqueness(self.cell, Location::Row(self.row)),
+         SudokuConstraint::Uniqueness(self.cell, Location::Col(self.col)),
+         SudokuConstraint::Uniqueness(self.cell, Location::Box(self.row / box_size, self.col / box_size)),
+         SudokuConstraint::Existence(self.row, self.col)]
     }
 }
 
@@ -53,7 +54,6 @@ fn isqrt(n: usize) -> usize {
 
 /// Return a fully-specified sudoku problem of the given size.
 pub fn sudoku_problem(n: usize) -> Option<SudokuProblem> {
-    println!("{}: {}", n, isqrt(n));
     let mut p = Problem::new();
     let box_size = isqrt(n);
     for i in 1..(n+1) {
@@ -68,14 +68,15 @@ pub fn sudoku_problem(n: usize) -> Option<SudokuProblem> {
 }
 
 /// Return a solver for a partially-filled sudoku problem.
-pub fn sudoku_solver(cells: &[&[usize]]) -> Result<SudokuSolver, String> {
+pub fn sudoku_solver(cells: &[usize]) -> Result<SudokuSolver, String> {
     // Verify the problem.
-    let psize  = cells.len();
+    let n = cells.len();
+    let psize = isqrt(n);
+    if psize * psize != n {
+        return Err("Not a square array".to_string());
+    }
 
-    for (i, arr) in cells.iter().enumerate() {
-        if arr.len() != psize {
-            return Err(format!("Size mismatch in cells: Row {} is of size {} (instead of {})", i, arr.len(), psize).to_string());
-        }
+    for (i, arr) in cells.chunks(psize).enumerate() {
         for (j, x) in arr.iter().enumerate() {
             if  *x > psize {
                 return Err(format!("Invalid entry at ({}, {}): {} >= {}", i, j, *x, psize).to_string())
@@ -88,7 +89,7 @@ pub fn sudoku_solver(cells: &[&[usize]]) -> Result<SudokuSolver, String> {
 
     // Try to insert of all the actions as stated, returning
     // prematurely if any insertions fail.
-    for (i, arr) in cells.iter().enumerate() {
+    for (i, arr) in cells.chunks(psize).enumerate() {
         for (j, x) in arr.iter().enumerate() {
             if *x != 0 {
                 let a =  SudokuAction::new(*x, i, j);
@@ -97,7 +98,16 @@ pub fn sudoku_solver(cells: &[&[usize]]) -> Result<SudokuSolver, String> {
                 }
             }
         }
-    }
 
+}
     Ok(s)
+}
+
+/// Given a list of actions, return an array that represents the solved sudoku.
+pub fn fill_from_solution(n: usize, actions: &[SudokuAction]) -> Vec<Vec<usize>> {
+    let mut sol: Vec<Vec<usize>> = (0..n).map(|_| vec![0; n]).collect();
+    for action in actions {
+        sol[action.row][action.col] = action.cell;
+    }
+    sol
 }
