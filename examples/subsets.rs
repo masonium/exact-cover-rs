@@ -1,6 +1,6 @@
-extern crate dancing_links;
+extern crate exact_cover;
 
-use dancing_links::{Problem, Solver};
+use exact_cover::{Problem, Solver};
 
 fn main() {
     // Create a new problem.

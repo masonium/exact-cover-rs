@@ -1,7 +1,7 @@
-extern crate dancing_links;
+extern crate exact_cover;
 
-use dancing_links::{Problem};
-use dancing_links::{Solver};
+use exact_cover::{Problem};
+use exact_cover::{Solver};
 
 #[test]
 fn solve_problem() {

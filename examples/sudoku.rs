@@ -1,6 +1,6 @@
-extern crate dancing_links;
+extern crate exact_cover;
 
-use dancing_links::instances::sudoku::{SudokuSolver, sudoku_solver, solution_as_matrix};
+use exact_cover::instances::sudoku::{SudokuSolver, sudoku_solver, solution_as_matrix};
 use std::io::{stdin, BufRead, BufReader};
 
 fn read_sudoku() -> Option<SudokuSolver> {

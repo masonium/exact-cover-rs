@@ -1,7 +1,7 @@
-extern crate dancing_links;
+extern crate exact_cover;
 
-use dancing_links::instances::sudoku::{sudoku_solver, sudoku_problem, SudokuAction, solution_as_matrix};
-use dancing_links::{Solver};
+use exact_cover::instances::sudoku::{sudoku_solver, sudoku_problem, SudokuAction, solution_as_matrix};
+use exact_cover::{Solver};
 
 
 #[test]
