@@ -1,7 +1,12 @@
 [package]
 name = "exact-cover"
+description = "library for solving exact cover problems"
+repository = "https://github.com/masonium/exact-cover-rs"
 version = "0.5.0"
 authors = ["Mason Smith <masonium@gmail.com>"]
+readme = "README.md"
+keywords = ["exact cover", "dlx", "dancing links", "algorithm x", "sudoku"]
+license = "MIT"
 
 [dependencies]
 clippy = {version = "*", optional = true}
