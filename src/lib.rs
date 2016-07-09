@@ -1,7 +1,7 @@
 mod node;
 mod problem;
 mod solver;
-mod column;
+mod cover;
 mod iter;
 
 pub mod instances;

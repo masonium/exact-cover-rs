@@ -25,7 +25,6 @@ pub fn try_cover_column(col: &OwnedNode) -> TempCoverColumn {
 }
 
 pub fn cover_column(col: &OwnedNode) {
-//    println!("Covering c{}", column_index);
     col.borrow_mut().remove_from_row();
 
     for r in iter_col(col) {
@@ -44,8 +43,6 @@ pub fn cover_column(col: &OwnedNode) {
 }
 
 pub fn uncover_column(col: &OwnedNode) {
-//    println!("Covering c{}", column_index);
-
     for r in iter_col(col).rev() {
         // For every node in the row (except the one from this
         // constraint), reinsert node into its column and

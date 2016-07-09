@@ -141,7 +141,6 @@ impl<A: Action, C: Constraint> Problem<A, C> {
     /// Cover a column by remove each action that could remove that
     /// column, and remove the column from the header list.
     pub fn cover_column(&self, column_index: usize) {
-        println!("Covering {:?}", self.constraint_names[column_index]);
         {
             let col = &self.constraints[column_index];
             col.borrow_mut().remove_from_row();
@@ -164,29 +163,6 @@ impl<A: Action, C: Constraint> Problem<A, C> {
                 self.constraints[ci].borrow_mut().dec_count();
             }
         }
-
-        self.assert_header_counts();
-    }
-
-    /// Uncover a column, repairing all links in reverse order.
-    pub fn uncover_column(&self, column_index: usize) {
-        println!("Uncovering c{}", column_index);
-        let iter = iter_col(&self.constraints[column_index]);
-
-        for r in iter.rev() {
-            // For every node in the row (except the one from this
-            // constraing), remove the node from its column and
-            // decrement the corresponding count
-            for n in iter_row(&r).rev() {
-                let sn = n.upgrade().unwrap();
-                let ci = sn.borrow().column.unwrap();
-
-                sn.borrow_mut().reinsert_into_column();
-                self.constraints[ci].borrow_mut().inc_count();
-            }
-        }
-
-        self.constraints[column_index].borrow_mut().reinsert_into_row();
 
         self.assert_header_counts();
     }

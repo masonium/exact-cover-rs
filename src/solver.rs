@@ -1,7 +1,7 @@
 use problem::{Problem, Constraint, Action};
 use iter::{iter_row, iter_col};
 use node::{get_header};
-use column::{try_cover_column, cover_column, uncover_column};
+use cover::{try_cover_column, cover_column, uncover_column};
 
 pub struct Solver<A: Action, C: Constraint> {
     problem: Problem<A, C>,
@@ -40,7 +40,6 @@ impl<A: Action, C: Constraint> Solver<A, C> {
     }
 
     fn first_solution_aux(&self, solution: &mut Vec<A>) -> bool {
-        println!("recurse.");
         let (tc, action_nodes) = {
             let constraint = self.problem.choose_column();
             if let None = constraint {
