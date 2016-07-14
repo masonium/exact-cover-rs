@@ -123,10 +123,23 @@ impl<A: Action, C: Constraint> Problem<A, C> {
         self.get_row(row_node).action()
     }
 
+    /// Return true if it is possible to require a row
+    pub fn can_require_row(&self, action: A) -> bool {
+        let act = &(self.actions.get(*self.action_map.get(&action).unwrap()).unwrap());
+
+        !act.iter().map(|node| { self.get_column(&node) }).any(|c| { c.borrow().is_already_chosen() })
+    }
+
+    /// Return the action row for a particular action
+    pub fn get_action_row(&self, action: A) -> Option<&Row<A>> {
+        self.action_map.get(&action)
+            .map(|i| self.actions.get(*i).unwrap())
+    }
+
     /// Require that a given action be part of the solution
     pub fn require_row(&mut self, action: A) -> Result<(), String> {
         let iter = {
-            let act = &(self.actions.get(*self.action_map.get(&action).unwrap()).unwrap());
+            let act = self.get_action_row(action).unwrap();
 
             if let Some(c) = act.iter().map(|node| { self.get_column(&node) }).find(|c| { c.borrow().is_already_chosen() })
             {
