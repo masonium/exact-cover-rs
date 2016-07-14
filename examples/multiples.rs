@@ -14,6 +14,6 @@ fn main() {
     let mut iter = solver.into_iter();
 
     let first_sol = iter.next();
-//    assert!(first_sol.is_some());
+    assert!(first_sol.is_some());
 //    assert_eq!(first_sol.unwrap().len(), 2);
 }
