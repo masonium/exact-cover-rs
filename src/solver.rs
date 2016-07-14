@@ -56,6 +56,7 @@ impl <A: Action, C: Constraint> SolutionIterator<A, C> {
             None =>  Some(self.partial.clone()),
             Some(c) => {
                 if c.borrow().get_count().unwrap() > 0 {
+                    cover_column(&c);
                     self.iter_stack.push(FrameState { iter: iter_col(&c), 
                                                       column: c.clone(),
                                                       row: None })
@@ -84,11 +85,17 @@ impl<A: Action, C: Constraint> Iterator for SolutionIterator<A, C>  {
 
             // Take the next action.
             if let Some(action_node) =  r.iter.next() {
+                let a = self.problem.get_action(&action_node);
+                {
+                    let sa = action_node.upgrade().unwrap();
+                    println!("trying action {}", sa.borrow().get_row().unwrap());
+                }
+
                 // put our frame back on the stack
                 self.iter_stack.push(r);
 
                 // add the action the current solution
-                self.current_solution.push(self.problem.get_action(&action_node));
+                self.current_solution.push(a);
 
                 cover_row(&action_node);
 
@@ -112,7 +119,6 @@ impl<A: Action, C: Constraint> Iterator for SolutionIterator<A, C>  {
                         // If there are, push a new frame.
                         let num_actions = c.borrow().get_count().unwrap();
                         if num_actions > 0 {
-                            println!("non-empty!");
                             cover_column(&c);
                             self.iter_stack.push(FrameState { iter: iter_col(&c), 
                                                               column: c.clone(),
