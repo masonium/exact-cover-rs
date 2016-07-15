@@ -263,6 +263,10 @@ impl<Action: Copy> Row<Action> {
         Row {nodes: nodes, id: index, action: action }
     }
 
+    pub fn first_node(&self) -> WeakNode {
+        Rc::downgrade(&self.nodes[0])
+    }
+
     pub fn iter(&self) -> FullRowIterator {
         FullRowIterator::new(&self)
     }

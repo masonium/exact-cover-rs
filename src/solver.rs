@@ -1,12 +1,149 @@
+use node::{OwnedNode, WeakNode};
 use problem::{Problem, Constraint, Action};
-use iter::{iter_col};
-use cover::{try_cover_column, try_cover_row};
+use iter::{iter_col, ColumnIterator};
+use cover::{try_cover_column, cover_column, uncover_column, try_cover_row, cover_row, uncover_row};
 
 /// A `Solver` consumes a problem and computes solutions to the exact
 /// cover problem.
 pub struct Solver<A: Action, C: Constraint> {
     problem: Problem<A, C>,
     partial_solution: Vec<A>,
+}
+
+#[derive(Debug)]
+struct FrameState {
+    iter: ColumnIterator,
+    column: OwnedNode,
+    row: Option<WeakNode>
+}
+
+impl Drop for FrameState {
+    fn drop(&mut self) {
+        // uncover the column
+        uncover_column(&self.column);
+
+        // uncover the row, if there is one
+        if let Some(ref node) = self.row {
+            uncover_row(node);
+        }
+    }
+}
+
+pub struct SolutionIterator<A: Action, C: Constraint> {
+    problem: Problem<A, C>,
+    partial: Vec<A>,
+    current_solution: Vec<A>,
+    iter_stack: Vec< FrameState >,
+    running: bool
+}
+
+impl<A: Action, C: Constraint>  Drop for SolutionIterator<A, C> {
+    fn drop(&mut self) {
+        while !self.iter_stack.is_empty() {
+            self.iter_stack.pop();
+        }
+    }
+}
+
+impl <A: Action, C: Constraint> SolutionIterator<A, C> {
+    pub fn new(problem: Problem<A, C>) -> SolutionIterator<A, C> {
+        Self::from_solver(Solver::new(problem))
+    }
+
+    pub fn from_solver(solver: Solver<A, C>) -> SolutionIterator<A, C> {
+        SolutionIterator { problem: solver.problem, 
+                           current_solution: solver.partial_solution.clone(),
+                           partial: solver.partial_solution, 
+                           iter_stack: Vec::new(),
+                           running: false}
+    }
+
+    // If init returns a solution, that's the only solution
+    fn init(&mut self) -> Option<Vec<A>> {
+        let c = self.problem.choose_column();
+        match c {
+            None =>  Some(self.partial.clone()),
+            Some(c) => {
+                if c.borrow().get_count().unwrap() > 0 {
+                    cover_column(&c);
+                    self.iter_stack.push(FrameState { iter: iter_col(&c), 
+                                                      column: c.clone(),
+                                                      row: None })
+                }
+                None
+            }
+        }
+    }
+}
+
+impl<A: Action, C: Constraint> Iterator for SolutionIterator<A, C>  {
+    type Item = Vec<A>;
+
+
+    fn next(&mut self) -> Option<Vec<A>> {
+        if !self.running {
+            self.init();
+            self.running = true;
+        }
+
+        let mut s = None;
+
+        // At each step, take the next action in the iterator. Try to push a new state onto the column.
+        while !self.iter_stack.is_empty() {
+            let next_action = {
+                let n = self.iter_stack.len();
+                self.iter_stack[n - 1].iter.next()
+            };
+
+            // Take the next action.
+            if let Some(action_node) = next_action {
+                let a = self.problem.get_action(&action_node);
+                // {
+                //     let sa = action_node.upgrade().unwrap();
+                //     println!("trying action {}", sa.borrow().get_row().unwrap());
+                // }
+
+                // add the action the current solution
+                self.current_solution.push(a);
+                cover_row(&action_node);
+
+                // Choose a new constraint
+                let c = self.problem.choose_column();
+
+                match c {
+                    // If there's no column to choose, we've found a result.
+                    None => {
+                        s = Some(self.current_solution.clone());
+
+                        // We need to uncover the row ourselves,
+                        // since we don't FrameState to do it for
+                        // us.
+                        uncover_row(&action_node);
+                        self.current_solution.pop();
+                    },
+                    // Otherwise, check to see if there are still options left.
+                    Some(c) => {
+                        // If there are, push a new frame.
+                        cover_column(&c);
+                        self.iter_stack.push(FrameState { iter: iter_col(&c), 
+                                                          column: c.clone(),
+                                                          row: Some(action_node) });
+                    }
+                }
+            } else {
+                let r = self.iter_stack.pop();
+                if let Some(_) = r {
+                    self.current_solution.pop();
+                }
+            }
+                
+            // if we found a solution during the iteration, return it
+            if s.is_some() {
+                return s;
+            }
+        }
+        None
+    }
 }
 
 impl<A: Action, C: Constraint> Solver<A, C> {
@@ -26,9 +163,9 @@ impl<A: Action, C: Constraint> Solver<A, C> {
     /// would otherewise exits.
     pub fn require_action(&mut self, action: A) -> Result<(), String> {
         match self.problem.require_row(action) {
-            Ok(r) => {
+            Ok(_) => {
                 self.partial_solution.push(action);
-                Ok(r)
+                Ok(())
             },
             Err(s) => {
                 Err(s)
@@ -91,3 +228,13 @@ impl<A: Action, C: Constraint> Solver<A, C> {
         false
     }
 }
+
+impl<A: Action, C: Constraint> IntoIterator for Solver<A, C> {
+    type Item = Vec<A>;
+    type IntoIter = SolutionIterator<A, C>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        SolutionIterator::from_solver(self)
+    }
+}
+
