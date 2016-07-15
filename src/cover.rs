@@ -25,7 +25,6 @@ pub fn try_cover_column(col: &OwnedNode) -> TempCoverColumn {
 }
 
 pub fn cover_column(col: &OwnedNode) {
-    println!("covering column {}", col.borrow().column.unwrap());
     col.borrow_mut().remove_from_row();
 
     for r in iter_col(col) {
@@ -44,7 +43,6 @@ pub fn cover_column(col: &OwnedNode) {
 }
 
 pub fn uncover_column(col: &OwnedNode) {
-    println!("uncovering column {}", col.borrow().column.unwrap());
     for r in iter_col(col).rev() {
         // For every node in the row (except the one from this
         // constraint), reinsert node into its column and
@@ -64,22 +62,12 @@ pub fn uncover_column(col: &OwnedNode) {
 }
 
 pub fn cover_row(node: &WeakNode) {
-    {
-        let s = node.upgrade().unwrap();
-        println!("covering row {}", s.borrow().get_row().unwrap());
-    }
-
     for c in iter_row(node) {
         cover_column(&get_header(&c).upgrade().unwrap())
     }
 }
 
 pub fn uncover_row(node: &WeakNode) {
-    {
-        let s = node.upgrade().unwrap();
-        println!("uncovering row {}", s.borrow().get_row().unwrap());
-    }
-
     for c in iter_row(node).rev() {
         uncover_column(&get_header(&c).upgrade().unwrap())
     }

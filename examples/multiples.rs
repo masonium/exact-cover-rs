@@ -5,15 +5,20 @@ use exact_cover::{Solver};
 
 fn main() {
     let mut p = Problem::new();
-    p.add_action(0, &[0, 1]);
-    p.add_action(1, &[2, 3]);
-    p.add_action(2, &[0, 3]);
-    p.add_action(3, &[1, 2]);
+    p.add_action("01", &[0, 1]);
+    p.add_action("03", &[0, 3]);
+    p.add_action("12", &[1, 2]);
+    p.add_action("23", &[2, 3]);
+    p.add_action("0", &[0]);
+    p.add_action("1", &[1]);
+    p.add_action("2", &[2]);
+    p.add_action("3", &[3]);
+
 
     let solver = Solver::new(p);
-    let mut iter = solver.into_iter();
+    let iter = solver.into_iter();
 
-    let first_sol = iter.next();
-    assert!(first_sol.is_some());
-//    assert_eq!(first_sol.unwrap().len(), 2);
+    for sol in iter {
+        println!("{:?}", sol);
+    }
 }

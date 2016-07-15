@@ -10,6 +10,7 @@ pub struct Solver<A: Action, C: Constraint> {
     partial_solution: Vec<A>,
 }
 
+#[derive(Debug)]
 struct FrameState {
     iter: ColumnIterator,
     column: OwnedNode,
@@ -34,6 +35,14 @@ pub struct SolutionIterator<A: Action, C: Constraint> {
     current_solution: Vec<A>,
     iter_stack: Vec< FrameState >,
     running: bool
+}
+
+impl<A: Action, C: Constraint>  Drop for SolutionIterator<A, C> {
+    fn drop(&mut self) {
+        while !self.iter_stack.is_empty() {
+            self.iter_stack.pop();
+        }
+    }
 }
 
 impl <A: Action, C: Constraint> SolutionIterator<A, C> {
@@ -81,22 +90,21 @@ impl<A: Action, C: Constraint> Iterator for SolutionIterator<A, C>  {
 
         // At each step, take the next action in the iterator. Try to push a new state onto the column.
         while !self.iter_stack.is_empty() {
-            let mut r = self.iter_stack.pop().unwrap();
+            let next_action = {
+                let n = self.iter_stack.len();
+                self.iter_stack[n - 1].iter.next()
+            };
 
             // Take the next action.
-            if let Some(action_node) =  r.iter.next() {
+            if let Some(action_node) = next_action {
                 let a = self.problem.get_action(&action_node);
-                {
-                    let sa = action_node.upgrade().unwrap();
-                    println!("trying action {}", sa.borrow().get_row().unwrap());
-                }
-
-                // put our frame back on the stack
-                self.iter_stack.push(r);
+                // {
+                //     let sa = action_node.upgrade().unwrap();
+                //     println!("trying action {}", sa.borrow().get_row().unwrap());
+                // }
 
                 // add the action the current solution
                 self.current_solution.push(a);
-
                 cover_row(&action_node);
 
                 // Choose a new constraint
@@ -105,31 +113,30 @@ impl<A: Action, C: Constraint> Iterator for SolutionIterator<A, C>  {
                 match c {
                     // If there's no column to choose, we've found a result.
                     None => {
-                        println!("found result.");
                         s = Some(self.current_solution.clone());
 
                         // We need to uncover the row ourselves,
                         // since we don't FrameState to do it for
                         // us.
                         uncover_row(&action_node);
+                        self.current_solution.pop();
                     },
                     // Otherwise, check to see if there are still options left.
                     Some(c) => {
-                        println!("new column.");
                         // If there are, push a new frame.
-                        let num_actions = c.borrow().get_count().unwrap();
-                        if num_actions > 0 {
-                            cover_column(&c);
-                            self.iter_stack.push(FrameState { iter: iter_col(&c), 
-                                                              column: c.clone(),
-                                                              row: Some(action_node) });
-                        } else {
-                            // otherwise, we still need to uncover the row.
-                            uncover_row(&action_node);
-                        }
+                        cover_column(&c);
+                        self.iter_stack.push(FrameState { iter: iter_col(&c), 
+                                                          column: c.clone(),
+                                                          row: Some(action_node) });
                     }
                 }
+            } else {
+                let r = self.iter_stack.pop();
+                if let Some(_) = r {
+                    self.current_solution.pop();
+                }
             }
+                
             // if we found a solution during the iteration, return it
             if s.is_some() {
                 return s;
